@@ -3,15 +3,25 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from fpdf import FPDF
 
-st.set_page_config(page_title="Security Risk Algorithm", layout="wide")
+# ----------------------------------
+# HELPER FUNCTIONS
+# ----------------------------------
 
-st.title("🔐 Security Risk Algorithm")
+# Map qualitative values to numeric scores
+QUAL_MAPPING = {
+    "Poor": 20,
+    "Fair": 50,
+    "Good": 80,
+    "Excellent": 100
+}
 
+def map_score(value):
+    if isinstance(value, str):
+        return QUAL_MAPPING[value]
+    return float(value)
 
-# ---------------------------------------------
-#  SCORING FUNCTION
-# ---------------------------------------------
-def compute_score(data):
+def compute_scores(data):
+    # Category weights
     weights = {
         "Physical Security": 0.25,
         "Access Control": 0.30,
@@ -20,74 +30,100 @@ def compute_score(data):
         "Emergency Preparedness": 0.10
     }
 
-    # Calculate category averages
-    category_scores = {
-        cat: sum(vals.values()) / len(vals)
-        for cat, vals in data.items()
-    }
+    category_scores = {}
+    contributions = {}
 
-    contributions = {
-        k: category_scores[k] * weights[k]
-        for k in category_scores
-    }
+    for cat, items in data.items():
+        item_scores = [map_score(v) for v in items.values()]
+        avg_score = sum(item_scores) / len(item_scores)
+        category_scores[cat] = round(avg_score, 2)
+        contributions[cat] = round(avg_score * weights[cat], 2)
 
-    overall_score = sum(contributions.values())
+    overall_score = round(sum(contributions.values()), 2)
 
-    # Risk Level
-    if overall_score < 30: level = "LOW"
-    elif overall_score < 50: level = "MODERATE"
-    elif overall_score < 70: level = "HIGH"
-    elif overall_score < 85: level = "VERY HIGH"
-    else: level = "CRITICAL"
-
-    return category_scores, contributions, overall_score, level
+    return category_scores, contributions, overall_score
 
 
-# ---------------------------------------------
-#   USER INPUT SECTION
-# ---------------------------------------------
-st.header("Enter Security Parameters")
+def generate_pdf(category_scores, contributions, overall):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
 
-with st.expander("A. Physical Security", expanded=True):
-    physical = {
-        "Perimeter Condition": st.slider("Perimeter Condition", 0, 100, 40),
-        "CCTV Coverage": st.slider("CCTV Coverage (%)", 0, 100, 35),
-        "Lighting Quality": st.slider("Lighting Quality", 0, 100, 45),
-        "Entry/Exit Control": st.slider("Entry/Exit Control", 0, 100, 30),
-    }
+    pdf.cell(200, 10, txt="Security Risk Assessment Report", ln=True, align='C')
+    pdf.ln(5)
 
-with st.expander("B. Access Control", expanded=False):
-    access = {
-        "Visitor Management": st.slider("Visitor Management", 0, 100, 20),
-        "ID Verification": st.slider("ID Verification Level", 0, 100, 10),
-        "Restricted Areas": st.slider("Restricted Area Protection", 0, 100, 5),
-        "After Hours Protocols": st.slider("After Hours Protocols", 0, 100, 25),
-    }
+    pdf.set_font("Arial", size=11)
+    pdf.cell(200, 10, txt=f"Overall Security Score: {overall}", ln=True)
+    pdf.ln(5)
 
-with st.expander("C. Personnel", expanded=False):
-    personnel = {
-        "Guard Count": st.slider("Guard Count Adequacy", 0, 100, 20),
-        "Training Frequency": st.slider("Training Frequency", 0, 100, 10),
-        "Background Checks": st.slider("Background Checks", 0, 100, 30),
-        "Shift Coverage": st.slider("Shift Coverage", 0, 100, 40),
-    }
+    pdf.set_font("Arial", "B", 11)
+    pdf.cell(200, 10, txt="Category Scores:", ln=True)
 
-with st.expander("D. Incident History", expanded=False):
-    incidents = {
-        "Incident Count Severity": st.slider("Incident Count Severity", 0, 100, 70),
-        "Incident Types": st.slider("Severity of Incident Types", 0, 100, 60),
-        "Response Time": st.slider("Average Response Time", 0, 100, 50),
-        "Documentation Quality": st.slider("Documentation Quality", 0, 100, 20),
-    }
+    pdf.set_font("Arial", size=10)
+    for k, v in category_scores.items():
+        pdf.cell(200, 7, txt=f"{k}: {v}", ln=True)
 
-with st.expander("E. Emergency Preparedness", expanded=False):
-    emergency = {
-        "Emergency Plan": st.slider("Emergency Plan Status", 0, 100, 5),
-        "Drill Frequency": st.slider("Drill Frequency", 0, 100, 10),
-        "Communication System": st.slider("Communication System", 0, 100, 5),
-        "Staff Readiness": st.slider("Staff Readiness", 0, 100, 15),
-    }
+    pdf.ln(5)
+    pdf.set_font("Arial", "B", 11)
+    pdf.cell(200, 10, txt="Weighted Contributions:", ln=True)
 
+    pdf.set_font("Arial", size=10)
+    for k, v in contributions.items():
+        pdf.cell(200, 7, txt=f"{k}: {v}", ln=True)
+
+    file_path = "security_risk_report.pdf"
+    pdf.output(file_path)
+
+    return file_path
+
+
+# ----------------------------------
+# STREAMLIT UI
+# ----------------------------------
+
+st.title("🔐 Security Risk Scoring Algorithm")
+st.write("Modify the inputs below to compute the facility’s security risk score.")
+
+st.header("1️⃣ Physical Security")
+physical = {
+    "Perimeter Condition": st.selectbox("Perimeter Condition", ["Poor", "Fair", "Good", "Excellent"]),
+    "CCTV Coverage %": st.number_input("CCTV Coverage (%)", min_value=0, max_value=100, step=1),
+    "CCTV Functionality %": st.number_input("Functional Cameras (%)", min_value=0, max_value=100, step=1),
+    "Lighting Quality": st.selectbox("Lighting Quality", ["Poor", "Fair", "Good", "Excellent"]),
+    "Entry/Exit Control Quality": st.selectbox("Entry/Exit Control", ["Poor", "Fair", "Good", "Excellent"])
+}
+
+st.header("2️⃣ Access Control")
+access = {
+    "Visitor Management": st.selectbox("Visitor Management", ["Poor", "Fair", "Good", "Excellent"]),
+    "ID Verification": st.selectbox("ID Verification", ["Poor", "Fair", "Good", "Excellent"]),
+    "Restricted Area Protection": st.selectbox("Restricted Area Protection", ["Poor", "Fair", "Good", "Excellent"]),
+    "After-Hours Security": st.selectbox("After-Hours Protocol", ["Poor", "Fair", "Good", "Excellent"])
+}
+
+st.header("3️⃣ Security Personnel")
+personnel = {
+    "Guard Count Ratio Score": st.number_input("Guard Adequacy Score (0-100)", min_value=0, max_value=100),
+    "Training Frequency": st.selectbox("Training Frequency", ["Poor", "Fair", "Good", "Excellent"]),
+    "Background Checks": st.selectbox("Background Checks", ["Poor", "Fair", "Good", "Excellent"]),
+    "Shift Coverage Quality": st.selectbox("Shift Coverage", ["Poor", "Fair", "Good", "Excellent"])
+}
+
+st.header("4️⃣ Incident History")
+incidents = {
+    "Incident Severity Score": st.number_input("Incident Score (0-100)", min_value=0, max_value=100),
+    "Incident Types Score": st.number_input("Incident Type Severity (0-100)", min_value=0, max_value=100),
+    "Response Time Score": st.number_input("Response Time Quality (0-100)", min_value=0, max_value=100),
+    "Documentation Quality": st.selectbox("Documentation Quality", ["Poor", "Fair", "Good", "Excellent"])
+}
+
+st.header("5️⃣ Emergency Preparedness")
+emergency = {
+    "Emergency Plan": st.selectbox("Emergency Plan", ["Poor", "Fair", "Good", "Excellent"]),
+    "Drill Frequency": st.selectbox("Drill Frequency", ["Poor", "Fair", "Good", "Excellent"]),
+    "Communication System": st.selectbox("Communication System", ["Poor", "Fair", "Good", "Excellent"]),
+    "Staff Readiness": st.selectbox("Staff Readiness", ["Poor", "Fair", "Good", "Excellent"])
+}
 
 data = {
     "Physical Security": physical,
@@ -97,45 +133,25 @@ data = {
     "Emergency Preparedness": emergency
 }
 
+if st.button("📊 Compute Security Risk Score"):
+    category_scores, contributions, overall = compute_scores(data)
 
-# ---------------------------------------------
-# COMPUTE BUTTON
-# ---------------------------------------------
-if st.button("Compute Security Score"):
-    cat_scores, contributions, overall, level = compute_score(data)
+    st.subheader("📌 Results")
+    st.write("### Overall Score:", overall)
 
-    st.subheader("📊 Risk Score Results")
-    st.metric("Overall Security Score", f"{overall:.2f}")
-    st.metric("Risk Level", level)
+    df_scores = pd.DataFrame({
+        "Category": list(category_scores.keys()),
+        "Score": list(category_scores.values())
+    })
 
-    st.write("### Category Scores")
-    st.table(pd.DataFrame.from_dict(cat_scores, orient="index", columns=["Score"]))
-
-    st.write("### Weighted Contributions")
-    st.table(pd.DataFrame.from_dict(contributions, orient="index", columns=["Contribution"]))
-
-    # Bar Chart
-    fig, ax = plt.subplots()
-    ax.bar(cat_scores.keys(), cat_scores.values())
-    ax.set_title("Category Scores")
+    fig, ax = plt.subplots(figsize=(5, 3))
+    ax.bar(df_scores["Category"], df_scores["Score"])
+    plt.xticks(rotation=45)
+    plt.ylim(0, 100)
     st.pyplot(fig)
 
-    # PDF Generation
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
+    # PDF report
+    file_path = generate_pdf(category_scores, contributions, overall)
+    with open(file_path, "rb") as pdf:
+        st.download_button("📄 Download PDF Report", pdf, file_name="security_report.pdf")
 
-    pdf.cell(200, 10, txt="Security Risk Assessment Report", ln=True, align='C')
-    pdf.ln(10)
-
-    pdf.cell(200, 10, txt=f"Overall Score: {overall:.2f}", ln=True)
-    pdf.cell(200, 10, txt=f"Risk Level: {level}", ln=True)
-    pdf.ln(10)
-
-    for cat, val in cat_scores.items():
-        pdf.cell(200, 8, txt=f"{cat}: {val:.2f}", ln=True)
-
-    pdf_file = "security_report.pdf"
-    pdf.output(pdf_file)
-
-    st.download_button("Download PDF Report", data=open(pdf_file, "rb"), file_name="security_report.pdf")
