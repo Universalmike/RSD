@@ -3,9 +3,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from fpdf import FPDF
 
-st.set_page_config(page_title="Security Risk Assessment", layout="wide")
+st.set_page_config(page_title="Security Risk Algorithm", layout="wide")
 
-st.title("🔐 Security Risk Assessment Tool")
+st.title("🔐 Security Risk Algorithm")
 
 
 # ---------------------------------------------
