@@ -136,19 +136,69 @@ data = {
 if st.button("📊 Compute Security Risk Score"):
     category_scores, contributions, overall = compute_scores(data)
 
-    st.subheader("📌 Results")
-    st.write("### Overall Score:", overall)
+       # ----------------------------
+    # DASHBOARD SECTION
+    # ----------------------------
+    st.header("📊 Security Dashboard")
 
-    df_scores = pd.DataFrame({
-        "Category": list(category_scores.keys()),
-        "Score": list(category_scores.values())
-    })
+    # ---- RISK LEVEL BADGE ----
+    def risk_level(score):
+        if score >= 85:
+            return ("🟢 LOW RISK", "Low")
+        elif score >= 70:
+            return ("🟡 MODERATE RISK", "Moderate")
+        elif score >= 50:
+            return ("🟠 HIGH RISK", "High")
+        else:
+            return ("🔴 CRITICAL RISK", "Critical")
 
-    fig, ax = plt.subplots(figsize=(5, 3))
-    ax.bar(df_scores["Category"], df_scores["Score"])
-    plt.xticks(rotation=45)
-    plt.ylim(0, 100)
+    badge, level = risk_level(overall)
+    st.subheader("Risk Rating")
+    st.markdown(f"### {badge}")
+
+    # ---- RADAR CHART ----
+    st.subheader("Risk Breakdown (Radar Chart)")
+    import numpy as np
+
+    labels = list(category_scores.keys())
+    stats = list(category_scores.values())
+
+    angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False).tolist()
+    stats += stats[:1]
+    angles += angles[:1]
+
+    fig = plt.figure(figsize=(4, 4))
+    ax = plt.subplot(111, polar=True)
+    ax.plot(angles, stats)
+    ax.fill(angles, stats, alpha=0.3)
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(labels)
+    ax.set_ylim(0, 100)
     st.pyplot(fig)
+
+    # ---- TOP 3 WEAKNESSES ----
+    st.subheader("🔻 Top 3 Weaknesses")
+    weakest = sorted(category_scores.items(), key=lambda x: x[1])[:3]
+
+    for area, score in weakest:
+        st.write(f"**{area}:** {score}")
+
+    # ---- AUTO RECOMMENDATIONS ----
+    st.subheader("📌 Recommendations")
+
+    recs = {
+        "Physical Security": "Improve perimeter integrity, upgrade lighting, and increase CCTV coverage.",
+        "Access Control": "Strengthen identity verification and improve restricted area policies.",
+        "Personnel": "Increase guard training and ensure full shift coverage.",
+        "Incident History": "Reduce incident frequency and improve response time & documentation.",
+        "Emergency Preparedness": "Conduct regular drills and improve communication systems."
+    }
+
+    st.write("### Priority Recommendations")
+
+    for area, score in weakest:
+        st.write(f"**{area}:** {recs[area]}")
+
 
     # PDF report
     file_path = generate_pdf(category_scores, contributions, overall)
