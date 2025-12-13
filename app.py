@@ -209,14 +209,6 @@ with col2:
 if compute_score_clicked:
     category_scores, contributions, overall = compute_scores(data)
 
-    st.session_state.category_scores = category_scores
-    st.session_state.contributions = contributions
-    st.session_state.overall = overall
-
-    category_scores = st.session_state.category_scores
-    contributions = st.session_state.contributions
-    overall = st.session_state.overall
-
 
        # ----------------------------
     # DASHBOARD SECTION
@@ -293,16 +285,13 @@ if compute_score_clicked:
         st.download_button("📄 Download PDF Report", pdf, file_name="security_report.pdf")
 
 if predict_risk_clicked:
+    category_scores, contributions, overall = compute_scores(data)
+
     st.markdown("---")
     st.header("🤖 Predictive Security Risk Analysis")
 
     import joblib
     import shap
-
-    category_scores = st.session_state.category_scores
-    contributions = st.session_state.contributions
-    overall = st.session_state.overall
-
 
     # Load model (cache in real app)
     model = joblib.load("security_multiorg_model.pkl")
