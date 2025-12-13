@@ -307,27 +307,27 @@ if predict_risk_clicked:
         prob = preds[i][0][1]
         st.metric(label, f"{prob:.2%}")
 
-    # ----------------------------
-    # SHAP EXPLANATION
-    # ----------------------------
-    st.subheader("🔍 Why these risks? (Explainable AI)")
-
-   rf_model = model.named_steps["clf"].estimators_[0]
-    explainer = shap.TreeExplainer(rf_model)
-
-    shap_values_safe = get_shap_values(explainer, X_input)
+        # ----------------------------
+        # SHAP EXPLANATION
+        # ----------------------------
+        st.subheader("🔍 Why these risks? (Explainable AI)")
     
-    fig, ax = plt.subplots(figsize=(6, 4))
-    shap.bar_plot(
-        shap_values_safe,
-        feature_names=X_input.columns,
-        max_display=8,
-        show=False
-    )
-    st.pyplot(fig)
-
-    shap_img = save_shap_plot(shap_values_safe, X_input.columns)
-    file_path = generate_pdf(category_scores, contributions, overall, shap_img)
-
+        rf_model = model.named_steps["clf"].estimators_[0]
+        explainer = shap.TreeExplainer(rf_model)
+    
+        shap_values_safe = get_shap_values(explainer, X_input)
+        
+        fig, ax = plt.subplots(figsize=(6, 4))
+        shap.bar_plot(
+            shap_values_safe,
+            feature_names=X_input.columns,
+            max_display=8,
+            show=False
+        )
+        st.pyplot(fig)
+    
+        shap_img = save_shap_plot(shap_values_safe, X_input.columns)
+        file_path = generate_pdf(category_scores, contributions, overall, shap_img)
+    
 
 
