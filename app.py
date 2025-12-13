@@ -77,7 +77,7 @@ def build_ml_features(data):
 
 
 
-def generate_pdf(category_scores, contributions, overall):
+def generate_pdf(category_scores, contributions, overall, shap_img=None):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
@@ -85,29 +85,53 @@ def generate_pdf(category_scores, contributions, overall):
     pdf.cell(200, 10, txt="Security Risk Assessment Report", ln=True, align='C')
     pdf.ln(5)
 
-    pdf.set_font("Arial", size=11)
-    pdf.cell(200, 10, txt=f"Overall Security Score: {overall}", ln=True)
+    pdf.cell(200, 10, txt=f"Overall Security Score: {overall}/100", ln=True)
     pdf.ln(5)
 
     pdf.set_font("Arial", "B", 11)
-    pdf.cell(200, 10, txt="Category Scores:", ln=True)
+    pdf.cell(200, 10, txt="Category Scores", ln=True)
 
     pdf.set_font("Arial", size=10)
     for k, v in category_scores.items():
         pdf.cell(200, 7, txt=f"{k}: {v}", ln=True)
 
-    pdf.ln(5)
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(200, 10, txt="Weighted Contributions:", ln=True)
-
-    pdf.set_font("Arial", size=10)
-    for k, v in contributions.items():
-        pdf.cell(200, 7, txt=f"{k}: {v}", ln=True)
+    if shap_img:
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(200, 10, txt="AI Risk Explanation (SHAP)", ln=True)
+        pdf.image(shap_img, x=15, y=30, w=180)
 
     file_path = "security_risk_report.pdf"
     pdf.output(file_path)
-
     return file_path
+
+
+def get_shap_values(explainer, X, target_index=0):
+    """
+    Safely extract SHAP values for class 1 of a target
+    """
+    shap_vals = explainer.shap_values(X)
+
+    # MultiOutput → pick target
+    shap_target = shap_vals[target_index]
+
+    # If binary class list, take class 1
+    if isinstance(shap_target, list):
+        return shap_target[1][0]
+
+    # Else already (n_samples, n_features)
+    return shap_target[0]
+
+def save_shap_plot(shap_values, feature_names):
+    fig, ax = plt.subplots(figsize=(6,4))
+    shap.bar_plot(shap_values, feature_names=feature_names, max_display=8, show=False)
+    plt.tight_layout()
+    img_path = "shap_explanation.png"
+    plt.savefig(img_path, dpi=150)
+    plt.close()
+    return img_path
+
+
 
 
 # ----------------------------------
@@ -185,6 +209,11 @@ if compute_score_clicked:
     # DASHBOARD SECTION
     # ----------------------------
     st.header("📊 Security Dashboard")
+
+    st.metric(
+    label="Security Risk Score",
+    value=f"{overall}/100"
+    )
 
     # ---- RISK LEVEL BADGE ----
     def risk_level(score):
@@ -283,17 +312,22 @@ if predict_risk_clicked:
     # ----------------------------
     st.subheader("🔍 Why these risks? (Explainable AI)")
 
-    rf_model = model.named_steps["clf"].estimators_[0]
+   rf_model = model.named_steps["clf"].estimators_[0]
     explainer = shap.TreeExplainer(rf_model)
-    shap_values = explainer.shap_values(X_input)
 
+    shap_values_safe = get_shap_values(explainer, X_input)
+    
     fig, ax = plt.subplots(figsize=(6, 4))
     shap.bar_plot(
-        shap_values[1][0],
+        shap_values_safe,
         feature_names=X_input.columns,
         max_display=8,
         show=False
     )
     st.pyplot(fig)
+
+    shap_img = save_shap_plot(shap_values_safe, X_input.columns)
+    file_path = generate_pdf(category_scores, contributions, overall, shap_img)
+
 
 
