@@ -301,33 +301,65 @@ if predict_risk_clicked:
         "Perimeter Breach"
     ]
 
-    st.subheader("Predicted Risk Probabilities")
+    st.subheader("📊 Predicted Risk Probabilities")
 
+    risk_results = {}
+    
     for i, label in enumerate(risk_labels):
         prob = preds[i][0][1]
+        risk_results[label] = prob
         st.metric(label, f"{prob:.2%}")
+
 
         # ----------------------------
         # SHAP EXPLANATION
         # ----------------------------
-        st.subheader("🔍 Why these risks? (Explainable AI)")
+    st.markdown("---")
+    st.subheader("🔍 Explain a Specific Risk (SHAP)")
     
-        rf_model = model.named_steps["clf"].estimators_[0]
-        explainer = shap.TreeExplainer(rf_model)
+    selected_risk = st.selectbox(
+        "Select risk to explain",
+        risk_labels
+    )
+
+    target_index = risk_labels.index(selected_risk)
+
     
-        shap_values_safe = get_shap_values(explainer, X_input)
+    rf_model = model.named_steps["clf"].estimators_[target_index]
+    explainer = shap.TreeExplainer(rf_model)
+
+    shap_values_safe = get_shap_values(
+        explainer,
+        X_input,
+        target_index=0  # single estimator now
+    )
+
         
-        fig, ax = plt.subplots(figsize=(6, 4))
-        shap.bar_plot(
-            shap_values_safe,
-            feature_names=X_input.columns,
-            max_display=8,
-            show=False
-        )
-        st.pyplot(fig)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    shap.bar_plot(
+    shap_values_safe,
+    feature_names=X_input.columns,
+    max_display=8,
+    show=False
+    )
+    st.pyplot(fig)
     
-        shap_img = save_shap_plot(shap_values_safe, X_input.columns)
-        file_path = generate_pdf(category_scores, contributions, overall, shap_img)
+    shap_img = save_shap_plot(shap_values_safe, X_input.columns)
+
+    file_path = generate_pdf(
+    category_scores,
+    contributions,
+    overall,
+    shap_img
+    )
+
+    with open(file_path, "rb") as f:
+        st.download_button(
+            "📄 Download AI Risk Report",
+            f,
+            file_name="security_risk_report.pdf"
+        )
+
     
 
 
