@@ -43,6 +43,39 @@ def compute_scores(data):
 
     return category_scores, contributions, overall_score
 
+def build_ml_features(data):
+    """
+    Converts rule-based input into ML feature format
+    """
+    return pd.DataFrame([{
+        "size_employees": 580,
+        "daily_visitors": 60,
+        "facility_area_sqm": 22000,
+
+        "cctv_coverage_pct": map_score(data["Physical Security"]["CCTV Coverage %"]),
+        "cctv_functional_pct": map_score(data["Physical Security"]["CCTV Functionality %"]),
+        "perimeter_cond_num": map_score(data["Physical Security"]["Perimeter Condition"]),
+        "recording_sys_num": 30,
+        "exterior_light_num": map_score(data["Physical Security"]["Lighting Quality"]),
+        "interior_light_num": 70,
+
+        "parking_security": 1,
+        "total_guards": 12,
+        "guard_to_area_ratio_per_1000sqm": 12 / 22,
+
+        "training_frequency_years": 2,
+        "background_check_num": map_score(data["Personnel"]["Background Checks"]),
+        "turnover_rate_pct": 60,
+
+        "documentation_quality_num": map_score(data["Incident History"]["Documentation Quality"]),
+        "avg_response_time_min": 12,
+
+        "communication_score": map_score(data["Emergency Preparedness"]["Communication System"]),
+        "emergency_plan_flag": 0,
+        "drill_frequency_per_year": 0
+    }])
+
+
 
 def generate_pdf(category_scores, contributions, overall):
     pdf = FPDF()
@@ -133,7 +166,19 @@ data = {
     "Emergency Preparedness": emergency
 }
 
-if st.button("📊 Compute Security Risk Score"):
+st.markdown("---")
+st.subheader("⚙️ Actions")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    compute_score_clicked = st.button("📊 Compute Risk Score")
+
+with col2:
+    predict_risk_clicked = st.button("🤖 Run Predictive Model")
+
+
+if compute_score_clicked:
     category_scores, contributions, overall = compute_scores(data)
 
        # ----------------------------
@@ -204,4 +249,51 @@ if st.button("📊 Compute Security Risk Score"):
     file_path = generate_pdf(category_scores, contributions, overall)
     with open(file_path, "rb") as pdf:
         st.download_button("📄 Download PDF Report", pdf, file_name="security_report.pdf")
+
+if predict_risk_clicked:
+    st.markdown("---")
+    st.header("🤖 Predictive Security Risk Analysis")
+
+    import joblib
+    import shap
+
+    # Load model (cache in real app)
+    model = joblib.load("security_multiorg_model.pkl")
+
+    X_input = build_ml_features(data)
+
+    # Predict probabilities
+    preds = model.predict_proba(X_input)
+
+    risk_labels = [
+        "Unauthorized Access",
+        "Insider Threat",
+        "Emergency Failure",
+        "Perimeter Breach"
+    ]
+
+    st.subheader("Predicted Risk Probabilities")
+
+    for i, label in enumerate(risk_labels):
+        prob = preds[i][0][1]
+        st.metric(label, f"{prob:.2%}")
+
+    # ----------------------------
+    # SHAP EXPLANATION
+    # ----------------------------
+    st.subheader("🔍 Why these risks? (Explainable AI)")
+
+    rf_model = model.named_steps["clf"].estimators_[0]
+    explainer = shap.TreeExplainer(rf_model)
+    shap_values = explainer.shap_values(X_input)
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    shap.bar_plot(
+        shap_values[1][0],
+        feature_names=X_input.columns,
+        max_display=8,
+        show=False
+    )
+    st.pyplot(fig)
+
 
