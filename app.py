@@ -132,6 +132,10 @@ def save_shap_plot(shap_values, feature_names):
     return img_path
 
 
+if "category_scores" not in st.session_state:
+    st.session_state.category_scores = None
+    st.session_state.contributions = None
+    st.session_state.overall = None
 
 
 # ----------------------------------
@@ -204,6 +208,15 @@ with col2:
 
 if compute_score_clicked:
     category_scores, contributions, overall = compute_scores(data)
+
+    st.session_state.category_scores = category_scores
+    st.session_state.contributions = contributions
+    st.session_state.overall = overall
+
+    category_scores = st.session_state.category_scores
+    contributions = st.session_state.contributions
+    overall = st.session_state.overall
+
 
        # ----------------------------
     # DASHBOARD SECTION
@@ -285,6 +298,11 @@ if predict_risk_clicked:
 
     import joblib
     import shap
+
+    category_scores = st.session_state.category_scores
+    contributions = st.session_state.contributions
+    overall = st.session_state.overall
+
 
     # Load model (cache in real app)
     model = joblib.load("security_multiorg_model.pkl")
