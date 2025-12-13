@@ -217,11 +217,11 @@ if compute_score_clicked:
 
     # ---- RISK LEVEL BADGE ----
     def risk_level(score):
-        if score >= 85:
+        if score <= 40:
             return ("🟢 LOW RISK", "Low")
-        elif score >= 70:
+        elif score > 40 and score <= 60:
             return ("🟡 MODERATE RISK", "Moderate")
-        elif score >= 50:
+        elif score > 60 and score <=80:
             return ("🟠 HIGH RISK", "High")
         else:
             return ("🔴 CRITICAL RISK", "Critical")
