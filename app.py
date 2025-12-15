@@ -18,10 +18,10 @@ st.set_page_config(
 # ----------------------------------
 
 QUAL_MAPPING = {
-    "Poor": 20,
-    "Fair": 50,
-    "Good": 80,
-    "Excellent": 100
+    "Poor": 90,
+    "Fair": 60,
+    "Good": 30,
+    "Excellent": 10
 }
 
 BASELINES = {
