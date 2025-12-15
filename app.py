@@ -8,8 +8,8 @@ import numpy as np
 # PAGE CONFIG
 # ----------------------------------
 st.set_page_config(
-    page_title="Security Risk Assessment",
-    page_icon="🔐",
+    page_title="Risk-Security Diagnostic ",
+    # page_icon="🔐",
     layout="wide"
 )
 
@@ -216,7 +216,7 @@ if "analysis_complete" not in st.session_state:
 # MAIN UI
 # ----------------------------------
 
-st.title("🔐 Security Risk Assessment System")
+st.title("Risk-Security Diagnostic")
 st.markdown("### Comprehensive facility security analysis and risk scoring")
 
 # Create tabs for better organization
