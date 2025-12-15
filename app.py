@@ -15,6 +15,66 @@ QUAL_MAPPING = {
     "Excellent": 100
 }
 
+import numpy as np
+
+def generate_baseline(feature_name, mean, std, n=30):
+    return np.random.normal(mean, std, n)
+    
+BASELINES = {
+    "incident_score": (40, 10),
+    "unauthorized_access_score": (35, 10),
+    "response_time_score": (60, 15),
+    "cctv_uptime": (85, 5),
+    "guard_adequacy": (70, 10),
+    "after_hours_security": (65, 10)
+}
+
+def z_score_anomaly(current, baseline):
+    mean = baseline.mean()
+    std = baseline.std()
+    if std == 0:
+        return 0
+    return (current - mean) / std
+
+def run_anomaly_engine(data):
+    features = build_anomaly_features(data)
+    alerts = []
+
+    for feature, value in features.items():
+        mean, std = BASELINES[feature]
+        baseline = generate_baseline(feature, mean, std)
+
+        z = z_score_anomaly(value, baseline)
+
+        if abs(z) >= 2:
+            severity = "HIGH"
+        elif abs(z) >= 1.3:
+            severity = "MEDIUM"
+        else:
+            continue
+
+        alerts.append({
+            "feature": feature,
+            "severity": severity,
+            "z_score": round(z, 2),
+            "value": value,
+            "message": explain_anomaly(feature, value, z)
+        })
+
+    return alerts
+
+def explain_anomaly(feature, value, z):
+    explanations = {
+        "incident_score": f"Incident activity is significantly higher than normal.",
+        "unauthorized_access_score": "Unauthorized access attempts exceed historical patterns.",
+        "response_time_score": "Security response time deviates from expected standards.",
+        "cctv_uptime": "CCTV uptime has dropped below operational reliability levels.",
+        "guard_adequacy": "Guard coverage is insufficient compared to facility risk.",
+        "after_hours_security": "After-hours security posture is weaker than baseline."
+    }
+
+    return explanations.get(feature, "Unusual behavior detected.")
+
 def map_score(value):
     if isinstance(value, str):
         return QUAL_MAPPING[value]
@@ -131,6 +191,20 @@ def save_shap_plot(shap_values, feature_names):
     plt.close()
     return img_path
 
+def build_anomaly_features(data):
+    return {
+        "incident_score": data["Incident History"]["Incident Severity Score"],
+        "unauthorized_access_score": data["Incident History"]["Incident Types Score"],
+        "response_time_score": data["Incident History"]["Response Time Score"],
+        "cctv_uptime": data["Physical Security"]["CCTV Functionality %"],
+        "cctv_coverage": data["Physical Security"]["CCTV Coverage %"],
+        "guard_adequacy": data["Personnel"]["Guard Count Ratio Score"],
+        "after_hours_security": map_score(
+            data["Access Control"]["After-Hours Security"]
+        ),
+    }
+
+
 
 if "category_scores" not in st.session_state:
     st.session_state.category_scores = None
@@ -205,11 +279,24 @@ with col1:
 with col2:
     predict_risk_clicked = st.button("🤖 Run Predictive Model")
 
+if "show_dashboard" not in st.session_state:
+    st.session_state.show_dashboard = False
+    
+if st.session_state.show_dashboard:
+    category_scores = st.session_state.category_scores
+    contributions = st.session_state.contributions
+    overall = st.session_state.overall
+
+    # dashboard code here
+
 
 if compute_score_clicked:
     category_scores, contributions, overall = compute_scores(data)
 
-
+    st.session_state.category_scores = category_scores
+    st.session_state.contributions = contributions
+    st.session_state.overall = overall
+    st.session_state.show_dashboard = True
        # ----------------------------
     # DASHBOARD SECTION
     # ----------------------------
@@ -283,6 +370,8 @@ if compute_score_clicked:
     file_path = generate_pdf(category_scores, contributions, overall)
     with open(file_path, "rb") as pdf:
         st.download_button("📄 Download PDF Report", pdf, file_name="security_report.pdf")
+# if "show_dashboard" not in st.session_state:
+#     st.session_state.show_dashboard = False
 
 if predict_risk_clicked:
     category_scores, contributions, overall = compute_scores(data)
@@ -367,6 +456,46 @@ if predict_risk_clicked:
             file_name="security_risk_report.pdf"
         )
 
-    
+st.subheader("🔁 What-If Simulation")
+
+extra_guards = st.slider("Add Extra Guards", 0, 20, 0)
+improve_cctv = st.slider("Improve CCTV Functionality (%)", 0, 100, 0)
+
+X_sim = X_input.copy()
+X_sim["total_guards"] += extra_guards
+X_sim["cctv_functional_pct"] = min(
+    100, X_sim["cctv_functional_pct"].iloc[0] + improve_cctv
+)
+preds_sim = model.predict_proba(X_sim)
+
+st.subheader("📉 Risk Change After Simulation")
+
+for i, label in enumerate(risk_labels):
+    before = preds[i][0][1]
+    after = preds_sim[i][0][1]
+    delta = after - before
+
+    st.metric(
+        label,
+        f"{after:.2%}",
+        delta=f"{delta:.2%}"
+    )
+
+
+st.markdown("---")
+st.header("🚨 Security Anomaly Detection")
+
+if st.button("🔍 Detect Anomalies"):
+    anomalies = run_anomaly_engine(data)
+
+    if not anomalies:
+        st.success("✅ No significant anomalies detected.")
+    else:
+        for a in anomalies:
+            if a["severity"] == "HIGH":
+                st.error(f"🚨 {a['message']} (Z={a['z_score']})")
+            else:
+                st.warning(f"⚠ {a['message']} (Z={a['z_score']})")
+
 
 
