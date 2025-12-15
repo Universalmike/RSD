@@ -2,18 +2,18 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from fpdf import FPDF
-import joblib
 import shap
+import joblib
+from fpdf import FPDF
 
-# ================================
+# ===============================
 # CONFIG
-# ================================
-st.set_page_config(layout="wide")
+# ===============================
+st.set_page_config("Security Risk Dashboard", layout="wide")
 
-# ================================
-# QUALITATIVE MAPPING
-# ================================
+# ===============================
+# CONSTANTS
+# ===============================
 QUAL_MAPPING = {
     "Poor": 20,
     "Fair": 50,
@@ -21,22 +21,22 @@ QUAL_MAPPING = {
     "Excellent": 100
 }
 
+RISK_LABELS = [
+    "Unauthorized Access",
+    "Insider Threat",
+    "Emergency Failure",
+    "Perimeter Breach"
+]
+
+# ===============================
+# UTILITIES
+# ===============================
 def map_score(v):
     return QUAL_MAPPING[v] if isinstance(v, str) else float(v)
 
-# ================================
-# SESSION STATE INIT
-# ================================
-for key in [
-    "category_scores", "contributions", "overall",
-    "show_dashboard", "model", "X_input", "preds"
-]:
-    if key not in st.session_state:
-        st.session_state[key] = None
-
-# ================================
-# RISK SCORING ENGINE
-# ================================
+# ===============================
+# RULE-BASED SCORING
+# ===============================
 def compute_scores(data):
     weights = {
         "Physical Security": 0.25,
@@ -51,211 +51,230 @@ def compute_scores(data):
 
     for cat, items in data.items():
         scores = [map_score(v) for v in items.values()]
-        avg = sum(scores) / len(scores)
+        avg = np.mean(scores)
         category_scores[cat] = round(avg, 2)
         contributions[cat] = round(avg * weights[cat], 2)
 
     overall = round(sum(contributions.values()), 2)
     return category_scores, contributions, overall
 
-def risk_level(score):
-    if score <= 40:
-        return "🟢 LOW RISK"
-    elif score <= 60:
-        return "🟡 MODERATE RISK"
-    elif score <= 80:
-        return "🟠 HIGH RISK"
-    return "🔴 CRITICAL RISK"
-
-# ================================
-# ML FEATURES
-# ================================
+# ===============================
+# ML FEATURES (MATCH TRAINING)
+# ===============================
 def build_ml_features(data):
+    """
+    Converts rule-based input into ML feature format
+    """
     return pd.DataFrame([{
         "size_employees": 580,
         "daily_visitors": 60,
         "facility_area_sqm": 22000,
-        "cctv_coverage_pct": data["Physical Security"]["CCTV Coverage %"],
-        "cctv_functional_pct": data["Physical Security"]["CCTV Functionality %"],
-        "perimeter_cond": map_score(data["Physical Security"]["Perimeter Condition"]),
-        "guard_score": data["Personnel"]["Guard Count Ratio Score"],
-        "training_score": map_score(data["Personnel"]["Training Frequency"]),
-        "background_check": map_score(data["Personnel"]["Background Checks"]),
-        "incident_score": data["Incident History"]["Incident Severity Score"],
-        "response_time": data["Incident History"]["Response Time Score"],
-        "communication_score": map_score(data["Emergency Preparedness"]["Communication System"])
+
+        "cctv_coverage_pct": map_score(data["Physical Security"]["CCTV Coverage %"]),
+        "cctv_functional_pct": map_score(data["Physical Security"]["CCTV Functionality %"]),
+        "perimeter_cond_num": map_score(data["Physical Security"]["Perimeter Condition"]),
+        "recording_sys_num": 30,
+        "exterior_light_num": map_score(data["Physical Security"]["Lighting Quality"]),
+        "interior_light_num": 70,
+
+        "parking_security": 1,
+        "total_guards": 12,
+        "guard_to_area_ratio_per_1000sqm": 12 / 22,
+
+        "training_frequency_years": 2,
+        "background_check_num": map_score(data["Personnel"]["Background Checks"]),
+        "turnover_rate_pct": 60,
+
+        "documentation_quality_num": map_score(data["Incident History"]["Documentation Quality"]),
+        "avg_response_time_min": 12,
+
+        "communication_score": map_score(data["Emergency Preparedness"]["Communication System"]),
+        "emergency_plan_flag": 0,
+        "drill_frequency_per_year": 0
     }])
 
-# ================================
-# SHAP HELPERS
-# ================================
-def safe_shap_values(explainer, X):
-    vals = explainer.shap_values(X)
-    if isinstance(vals, list):
-        return vals[1][0]
-    return vals[0]
+# ===============================
+# SHAP SAFE HANDLER
+# ===============================
+def get_shap_values(model, X):
+    explainer = shap.TreeExplainer(model)
+    shap_vals = explainer.shap_values(X)
+    return shap_vals[1][0]  # class 1, first row
 
-def save_shap_plot(values, names):
-    fig, ax = plt.subplots(figsize=(6,4))
-    shap.bar_plot(values, feature_names=names, max_display=8, show=False)
-    plt.tight_layout()
-    path = "shap.png"
-    plt.savefig(path, dpi=150)
-    plt.close()
-    return path
-
-# ================================
-# ANOMALY ENGINE
-# ================================
-BASELINES = {
-    "incident_score": (40, 10),
-    "response_time": (60, 15),
-    "cctv_functional_pct": (85, 5),
-    "guard_score": (70, 10)
-}
-
-def run_anomaly_engine(X):
-    alerts = []
-    for col, (mean, std) in BASELINES.items():
-        baseline = np.random.normal(mean, std, 30)
-        z = (X[col].iloc[0] - baseline.mean()) / baseline.std()
-        if abs(z) > 1.5:
-            alerts.append((col, z))
-    return alerts
-
-# ================================
+# ===============================
 # PDF REPORT
-# ================================
-def generate_pdf(scores, contribs, overall, shap_img=None):
+# ===============================
+def generate_pdf(category_scores, overall, shap_img=None):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    pdf.cell(0, 10, "Security Risk Assessment Report", ln=True, align="C")
+
+    pdf.cell(200, 10, "Security Risk Assessment Report", ln=True, align="C")
     pdf.ln(5)
-    pdf.cell(0, 10, f"Overall Score: {overall}/100", ln=True)
+    pdf.cell(200, 10, f"Overall Risk Score: {overall}/100", ln=True)
 
     pdf.ln(5)
-    for k, v in scores.items():
-        pdf.cell(0, 8, f"{k}: {v}", ln=True)
+    for k, v in category_scores.items():
+        pdf.cell(200, 8, f"{k}: {v}", ln=True)
 
     if shap_img:
         pdf.add_page()
-        pdf.image(shap_img, x=10, y=20, w=180)
+        pdf.image(shap_img, w=180)
 
-    path = "security_report.pdf"
+    path = "security_risk_report.pdf"
     pdf.output(path)
     return path
 
-# ================================
-# UI INPUTS
-# ================================
-st.title("🔐 Predictive Security Risk Dashboard")
+# ===============================
+# ANOMALY ENGINE
+# ===============================
+BASELINES = {
+    "Incident Severity": (40, 10),
+    "Unauthorized Access": (35, 10),
+    "CCTV Uptime": (90, 5),
+    "After Hours": (65, 10)
+}
 
+def run_anomaly_engine(data):
+    alerts = []
+
+    current = {
+        "Incident Severity": data["Incident History"]["Incident Severity Score"],
+        "Unauthorized Access": data["Incident History"]["Incident Types Score"],
+        "CCTV Uptime": data["Physical Security"]["CCTV Functionality %"],
+        "After Hours": map_score(data["Access Control"]["After-Hours Security"])
+    }
+
+    for k, v in current.items():
+        mean, std = BASELINES[k]
+        z = (v - mean) / std
+        if abs(z) >= 2:
+            alerts.append((k, "HIGH", round(z, 2)))
+        elif abs(z) >= 1.3:
+            alerts.append((k, "MEDIUM", round(z, 2)))
+
+    return alerts
+
+# ===============================
+# STREAMLIT UI
+# ===============================
+st.title("🔐 Security Risk Dashboard")
+
+# ---- INPUTS ----
 st.sidebar.header("Facility Inputs")
 
 physical = {
     "Perimeter Condition": st.sidebar.selectbox("Perimeter Condition", QUAL_MAPPING),
-    "CCTV Coverage %": st.sidebar.number_input("CCTV Coverage", 0, 100, 35),
-    "CCTV Functionality %": st.sidebar.number_input("CCTV Functionality", 0, 100, 55)
+    "CCTV Coverage %": st.sidebar.slider("CCTV Coverage %", 0, 100, 70),
+    "CCTV Functionality %": st.sidebar.slider("CCTV Functionality %", 0, 100, 85),
+    "Lighting Quality": st.sidebar.selectbox("Lighting Quality", QUAL_MAPPING)
+}
+
+access = {
+    "After-Hours Security": st.sidebar.selectbox("After-Hours Security", QUAL_MAPPING)
 }
 
 personnel = {
-    "Guard Count Ratio Score": st.sidebar.number_input("Guard Adequacy", 0, 100, 40),
-    "Training Frequency": st.sidebar.selectbox("Training", QUAL_MAPPING),
+    "Guard Count Ratio Score": st.sidebar.slider("Guard Adequacy Score", 0, 100, 70),
     "Background Checks": st.sidebar.selectbox("Background Checks", QUAL_MAPPING)
 }
 
-incidents = {
-    "Incident Severity Score": st.sidebar.number_input("Incident Severity", 0, 100, 70),
-    "Response Time Score": st.sidebar.number_input("Response Time", 0, 100, 45)
+incident = {
+    "Incident Severity Score": st.sidebar.slider("Incident Severity", 0, 100, 30),
+    "Incident Types Score": st.sidebar.slider("Unauthorized Access Severity", 0, 100, 25)
 }
 
 emergency = {
-    "Communication System": st.sidebar.selectbox("Communication", QUAL_MAPPING)
+    "Communication System": st.sidebar.selectbox("Communication System", QUAL_MAPPING)
 }
 
 data = {
     "Physical Security": physical,
+    "Access Control": access,
     "Personnel": personnel,
-    "Incident History": incidents,
+    "Incident History": incident,
     "Emergency Preparedness": emergency
 }
 
-# ================================
-# ACTION BUTTONS
-# ================================
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("📊 Compute Risk Score"):
-        scores, contribs, overall = compute_scores(data)
-        st.session_state.category_scores = scores
-        st.session_state.contributions = contribs
-        st.session_state.overall = overall
-        st.session_state.show_dashboard = True
+# ===============================
+# COMPUTE SCORE
+# ===============================
+if st.button("📊 Compute Risk"):
+    cat, contrib, overall = compute_scores(data)
 
-with col2:
-    if st.button("🤖 Run Predictive Model"):
-        st.session_state.model = joblib.load("security_multiorg_model.pkl")
-        st.session_state.X_input = build_ml_features(data)
-        st.session_state.preds = st.session_state.model.predict_proba(
-            st.session_state.X_input
-        )
+    st.metric("Overall Risk Score", f"{overall}/100")
 
-# ================================
-# DASHBOARD
-# ================================
-if st.session_state.show_dashboard:
-    st.header("📊 Risk Dashboard")
-    st.metric("Overall Risk Score", f"{st.session_state.overall}/100")
-    st.markdown(f"### {risk_level(st.session_state.overall)}")
+    badge = (
+        "🟢 LOW" if overall <= 40 else
+        "🟡 MODERATE" if overall <= 60 else
+        "🟠 HIGH" if overall <= 80 else
+        "🔴 CRITICAL"
+    )
+    st.subheader(badge)
 
-# ================================
-# PREDICTION + SHAP
-# ================================
-if st.session_state.preds is not None:
-    st.header("🤖 Predicted Threat Probabilities")
+# ===============================
+# PREDICTIVE MODEL
+# ===============================
+if st.button("🤖 Run AI Risk Model"):
+    model = joblib.load("security_multiorg_model.pkl")
+    X = build_ml_features(data)
 
-    labels = [
-        "Unauthorized Access",
-        "Insider Threat",
-        "Emergency Failure",
-        "Perimeter Breach"
-    ]
+    expected = model.named_steps["preprocessor"].get_feature_names_out()
+    X = X.reindex(columns=expected, fill_value=0)
 
-    for i, lbl in enumerate(labels):
-        st.metric(lbl, f"{st.session_state.preds[i][0][1]:.2%}")
+    preds = model.predict_proba(X)
 
-    choice = st.selectbox("Explain Risk", labels)
-    idx = labels.index(choice)
+    st.session_state.model = model
+    st.session_state.X = X
+    st.session_state.preds = preds
 
-    est = st.session_state.model.named_steps["clf"].estimators_[idx]
-    explainer = shap.TreeExplainer(est)
-    shap_vals = safe_shap_values(explainer, st.session_state.X_input)
+    st.subheader("Predicted Risks")
+    for i, label in enumerate(RISK_LABELS):
+        st.metric(label, f"{preds[i][0][1]:.2%}")
 
-    st.subheader("🔍 SHAP Explanation")
-    fig, ax = plt.subplots(figsize=(6,4))
-    shap.bar_plot(shap_vals, feature_names=st.session_state.X_input.columns, show=False)
+# ===============================
+# SHAP EXPLANATION
+# ===============================
+if "model" in st.session_state:
+    st.subheader("🔍 Explain a Risk")
+    risk = st.selectbox("Select Risk", RISK_LABELS)
+    idx = RISK_LABELS.index(risk)
+
+    clf = st.session_state.model.named_steps["clf"].estimators_[idx]
+    shap_vals = get_shap_values(clf, st.session_state.X)
+
+    fig, ax = plt.subplots()
+    shap.bar_plot(shap_vals, feature_names=st.session_state.X.columns, show=False)
     st.pyplot(fig)
 
-    shap_img = save_shap_plot(shap_vals, st.session_state.X_input.columns)
-    pdf = generate_pdf(
-        st.session_state.category_scores,
-        st.session_state.contributions,
-        st.session_state.overall,
-        shap_img
+# ===============================
+# WHAT-IF SIMULATION
+# ===============================
+st.subheader("🔁 What-If Simulation")
+extra_guards = st.slider("Add Guards", 0, 20, 0)
+improve_cctv = st.slider("Improve CCTV %", 0, 20, 0)
+
+if "X" in st.session_state:
+    X_sim = st.session_state.X.copy()
+    X_sim["total_guards"] += extra_guards
+    X_sim["cctv_functional_pct"] = np.clip(
+        X_sim["cctv_functional_pct"] + improve_cctv, 0, 100
     )
-    with open(pdf, "rb") as f:
-        st.download_button("📄 Download Report", f)
 
-# ================================
-# ANOMALY DETECTION
-# ================================
-st.header("🚨 Anomaly Detection")
+    preds_sim = st.session_state.model.predict_proba(X_sim)
 
+    for i, label in enumerate(RISK_LABELS):
+        delta = preds_sim[i][0][1] - st.session_state.preds[i][0][1]
+        st.metric(label, f"{preds_sim[i][0][1]:.2%}", f"{delta:+.2%}")
+
+# ===============================
+# ANOMALIES
+# ===============================
+st.subheader("🚨 Anomaly Detection")
 if st.button("Detect Anomalies"):
-    anomalies = run_anomaly_engine(st.session_state.X_input)
-    if not anomalies:
+    alerts = run_anomaly_engine(data)
+    if not alerts:
         st.success("No anomalies detected")
-    for col, z in anomalies:
-        st.warning(f"{col} anomaly detected (Z={z:.2f})")
-
+    else:
+        for a in alerts:
+            st.error(f"{a[0]} anomaly ({a[1]}) | Z={a[2]}")
