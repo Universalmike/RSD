@@ -232,7 +232,7 @@ with tab1:
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("🏢 Physical Security")
+        st.subheader("Physical Security")
         physical = {
             "Perimeter Condition": st.selectbox("Perimeter Condition", ["Poor", "Fair", "Good", "Excellent"], key="peri"),
             "CCTV Coverage %": st.number_input("CCTV Coverage (%)", 0, 100, 75, key="cctv_cov"),
@@ -241,7 +241,7 @@ with tab1:
             "Entry/Exit Control Quality": st.selectbox("Entry/Exit Control", ["Poor", "Fair", "Good", "Excellent"], key="entry")
         }
         
-        st.subheader("🚪 Access Control")
+        st.subheader("Access Control")
         access = {
             "Visitor Management": st.selectbox("Visitor Management", ["Poor", "Fair", "Good", "Excellent"], key="visitor"),
             "ID Verification": st.selectbox("ID Verification", ["Poor", "Fair", "Good", "Excellent"], key="id_ver"),
@@ -249,7 +249,7 @@ with tab1:
             "After-Hours Security": st.selectbox("After-Hours Protocol", ["Poor", "Fair", "Good", "Excellent"], key="after_hours")
         }
         
-        st.subheader("👮 Security Personnel")
+        st.subheader("Security Personnel")
         personnel = {
             "Guard Count Ratio Score": st.number_input("Guard Adequacy Score (0-100)", 0, 100, 70, key="guard_ratio"),
             "Training Frequency": st.selectbox("Training Frequency", ["Poor", "Fair", "Good", "Excellent"], key="training"),
@@ -258,7 +258,7 @@ with tab1:
         }
     
     with col2:
-        st.subheader("📋 Incident History")
+        st.subheader("Incident History")
         incidents = {
             "Incident Severity Score": st.number_input("Incident Score (0-100)", 0, 100, 40, key="inc_sev"),
             "Incident Types Score": st.number_input("Incident Type Severity (0-100)", 0, 100, 35, key="inc_type"),
@@ -266,7 +266,7 @@ with tab1:
             "Documentation Quality": st.selectbox("Documentation Quality", ["Poor", "Fair", "Good", "Excellent"], key="doc_qual")
         }
         
-        st.subheader("🚨 Emergency Preparedness")
+        st.subheader("Emergency Preparedness")
         emergency = {
             "Emergency Plan": st.selectbox("Emergency Plan", ["Poor", "Fair", "Good", "Excellent"], key="emerg_plan"),
             "Drill Frequency": st.selectbox("Drill Frequency", ["Poor", "Fair", "Good", "Excellent"], key="drill"),
