@@ -6,3 +6,4 @@ joblib
 shap
 datetime
 numpy
+google-generativeai>=0.5.4
