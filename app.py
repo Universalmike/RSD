@@ -152,7 +152,7 @@ async def get_gemini_recommendations(data, category_scores, overall_score, api_k
     import google.generativeai as genai
     
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel("models/gemini-2.5-flash")
     
     prompt = f"""You are a security risk management expert. Analyze this facility security assessment and provide detailed, actionable recommendations.
 
