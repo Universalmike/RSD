@@ -152,7 +152,7 @@ async def get_gemini_recommendations(data, category_scores, overall_score, api_k
     import google.generativeai as genai
     
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("models/gemini-2.5-flash")
+    model = genai.GenerativeModel('gemini-pro')
     
     prompt = f"""You are a security risk management expert. Analyze this facility security assessment and provide detailed, actionable recommendations.
 
@@ -165,64 +165,184 @@ Category Scores:
 Detailed Inputs:
 {json.dumps(data, indent=2)}
 
-Please provide:
-1. Top 5 critical security gaps with specific remediation steps
-2. Cost estimates (Low: <$5k, Medium: $5-20k, High: $20-50k, Very High: >$50k)
-3. Implementation timeline (Immediate, 1-3 months, 3-6 months, 6-12 months)
-4. Expected ROI and risk reduction percentage
-5. Compliance implications (ISO 27001, NIST, etc.)
-6. Quick wins (low-cost, high-impact improvements)
-7. Long-term strategic recommendations
+IMPORTANT: Respond with ONLY valid JSON, no markdown formatting, no code blocks, no explanations before or after.
 
-Format as JSON with this structure:
+Provide exactly this JSON structure:
 {{
+  "executive_summary": "2-3 sentence overview of security posture and top priorities",
   "critical_gaps": [
     {{
-      "issue": "description",
-      "severity": "Critical/High/Medium",
-      "category": "Physical Security/Access Control/etc",
-      "remediation": "specific steps",
-      "cost": "Low/Medium/High/Very High",
-      "timeline": "timeframe",
-      "roi": "percentage",
-      "risk_reduction": "percentage",
-      "compliance": ["standards"]
+      "issue": "specific security gap description",
+      "severity": "Critical",
+      "category": "Physical Security",
+      "remediation": "detailed step-by-step remediation plan",
+      "cost": "Medium",
+      "timeline": "1-3 months",
+      "roi": "150",
+      "risk_reduction": "25",
+      "compliance": ["ISO 27001", "NIST CSF"]
     }}
   ],
   "quick_wins": [
     {{
-      "action": "description",
-      "impact": "description",
-      "cost": "amount",
-      "timeline": "timeframe"
+      "action": "specific quick action",
+      "impact": "expected security improvement",
+      "cost": "$2,000",
+      "timeline": "1 week"
     }}
   ],
   "strategic_initiatives": [
     {{
-      "initiative": "description",
-      "rationale": "why important",
-      "investment": "amount",
-      "timeline": "timeframe",
-      "expected_outcome": "description"
+      "initiative": "long-term security improvement",
+      "rationale": "why this is important",
+      "investment": "$50,000",
+      "timeline": "6-12 months",
+      "expected_outcome": "measurable result"
     }}
-  ],
-  "executive_summary": "2-3 sentence overview of security posture and priorities"
-}}"""
+  ]
+}}
+
+Rules:
+- cost must be exactly one of: "Low", "Medium", "High", "Very High"
+- timeline must be one of: "Immediate", "1-3 months", "3-6 months", "6-12 months"
+- roi and risk_reduction must be single numbers (not ranges), just the number without % symbol
+- Provide 3-5 critical_gaps, 2-3 quick_wins, 2-3 strategic_initiatives
+- severity must be one of: "Critical", "High", "Medium"
+- Focus on the weakest categories: {', '.join([k for k, v in sorted(category_scores.items(), key=lambda x: x[1], reverse=True)[:3]])}
+"""
 
     try:
         response = model.generate_content(prompt)
-        # Extract JSON from response
-        text = response.text
+        text = response.text.strip()
+        
+        # Remove markdown code blocks if present
+        text = text.replace('```json', '').replace('```', '').strip()
+        
         # Find JSON content
         start = text.find('{')
         end = text.rfind('}') + 1
+        
         if start != -1 and end > start:
             json_str = text[start:end]
-            return json.loads(json_str)
-        return None
+            parsed = json.loads(json_str)
+            
+            # Validate structure
+            if 'critical_gaps' in parsed and 'executive_summary' in parsed:
+                return parsed
+            else:
+                st.warning("AI response missing required fields. Using fallback recommendations.")
+                return get_fallback_recommendations(category_scores, data)
+        else:
+            st.warning("Could not parse AI response. Using fallback recommendations.")
+            return get_fallback_recommendations(category_scores, data)
+            
+    except json.JSONDecodeError as e:
+        st.error(f"JSON parsing error: {str(e)}")
+        return get_fallback_recommendations(category_scores, data)
     except Exception as e:
         st.error(f"Gemini API error: {str(e)}")
-        return None
+        return get_fallback_recommendations(category_scores, data)
+
+def get_fallback_recommendations(category_scores, data):
+    """Provide rule-based recommendations if AI fails"""
+    weakest = sorted(category_scores.items(), key=lambda x: x[1], reverse=True)[:3]
+    
+    recommendations = {
+        "executive_summary": f"Security assessment reveals primary concerns in {weakest[0][0]} ({weakest[0][1]}/100 risk score). Immediate attention required for access control and physical security measures.",
+        "critical_gaps": [],
+        "quick_wins": [
+            {
+                "action": "Conduct immediate security awareness training",
+                "impact": "Reduces human error incidents by 30%",
+                "cost": "$1,500",
+                "timeline": "1 week"
+            },
+            {
+                "action": "Update visitor management procedures",
+                "impact": "Improves access control tracking",
+                "cost": "$500",
+                "timeline": "Immediate"
+            }
+        ],
+        "strategic_initiatives": [
+            {
+                "initiative": "Implement integrated security management system",
+                "rationale": "Centralize monitoring and response capabilities",
+                "investment": "$75,000",
+                "timeline": "6-12 months",
+                "expected_outcome": "50% faster incident response times"
+            }
+        ]
+    }
+    
+    # Generate critical gaps based on weak areas
+    for category, score in weakest:
+        if category == "Physical Security" and score > 50:
+            recommendations["critical_gaps"].append({
+                "issue": "Insufficient perimeter security and surveillance coverage",
+                "severity": "High",
+                "category": "Physical Security",
+                "remediation": "Install additional CCTV cameras, upgrade perimeter fencing, add motion sensors",
+                "cost": "High",
+                "timeline": "3-6 months",
+                "roi": "120",
+                "risk_reduction": "35",
+                "compliance": ["ISO 27001", "NIST CSF"]
+            })
+        
+        elif category == "Access Control" and score > 50:
+            recommendations["critical_gaps"].append({
+                "issue": "Weak identity verification and access control measures",
+                "severity": "Critical",
+                "category": "Access Control",
+                "remediation": "Deploy biometric access control, implement multi-factor authentication, establish visitor pre-registration",
+                "cost": "Medium",
+                "timeline": "1-3 months",
+                "roi": "200",
+                "risk_reduction": "40",
+                "compliance": ["ISO 27001"]
+            })
+        
+        elif category == "Personnel" and score > 50:
+            recommendations["critical_gaps"].append({
+                "issue": "Inadequate security personnel training and coverage",
+                "severity": "High",
+                "category": "Personnel",
+                "remediation": "Increase guard-to-area ratio, implement quarterly training programs, improve shift scheduling",
+                "cost": "Medium",
+                "timeline": "1-3 months",
+                "roi": "150",
+                "risk_reduction": "30",
+                "compliance": ["NIST CSF"]
+            })
+        
+        elif category == "Incident History" and score > 60:
+            recommendations["critical_gaps"].append({
+                "issue": "High incident frequency and slow response times",
+                "severity": "Critical",
+                "category": "Incident History",
+                "remediation": "Establish 24/7 security operations center, implement automated alert system, improve incident documentation",
+                "cost": "Very High",
+                "timeline": "3-6 months",
+                "roi": "180",
+                "risk_reduction": "50",
+                "compliance": ["ISO 27001", "NIST CSF"]
+            })
+        
+        elif category == "Emergency Preparedness" and score > 50:
+            recommendations["critical_gaps"].append({
+                "issue": "Insufficient emergency response planning and drills",
+                "severity": "Medium",
+                "category": "Emergency Preparedness",
+                "remediation": "Develop comprehensive emergency response plan, conduct monthly drills, upgrade communication systems",
+                "cost": "Low",
+                "timeline": "1-3 months",
+                "roi": "100",
+                "risk_reduction": "25",
+                "compliance": ["NIST CSF"]
+            })
+    
+    return recommendations
 
 # ----------------------------------
 # HELPER FUNCTIONS
@@ -495,7 +615,23 @@ def calculate_budget_roi(recommendations, current_budget):
         for rec in recommendations['critical_gaps']:
             cost_map = {"Low": 3000, "Medium": 12500, "High": 35000, "Very High": 75000}
             cost = cost_map.get(rec.get('cost', 'Medium'), 12500)
-            risk_reduction = float(rec.get('risk_reduction', '20').replace('%', ''))
+            
+            # Parse risk reduction (handle ranges like "20-30%" or "20%")
+            risk_reduction_str = str(rec.get('risk_reduction', '20'))
+            risk_reduction_str = risk_reduction_str.replace('%', '').strip()
+            
+            # If it's a range, take the average
+            if '-' in risk_reduction_str:
+                try:
+                    parts = risk_reduction_str.split('-')
+                    risk_reduction = (float(parts[0]) + float(parts[1])) / 2
+                except:
+                    risk_reduction = 20.0
+            else:
+                try:
+                    risk_reduction = float(risk_reduction_str)
+                except:
+                    risk_reduction = 20.0
             
             # Estimate annual loss prevented
             estimated_loss = 100000  # Base estimate
