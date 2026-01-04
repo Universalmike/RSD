@@ -4,7 +4,7 @@ Simple, focused implementation for monitoring camera feed quality
 No ML required - uses computer vision fundamentals
 """
 
-import cv2
+#import cv2
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
