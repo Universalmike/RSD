@@ -4,7 +4,3 @@ matplotlib
 fpdf
 joblib
 shap
-opencv
-numpy
-datetime
-time
