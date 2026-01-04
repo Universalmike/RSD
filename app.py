@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from fpdf import FPDF
 import numpy as np
 from functions.risk_ass import *
+from functions.camera import CameraHealthMonitor
 # ----------------------------------
 # PAGE CONFIG
 # ----------------------------------
@@ -12,187 +13,6 @@ st.set_page_config(
     # page_icon="🔐",
     layout="wide"
 )
-
-# ----------------------------------
-# HELPER FUNCTIONS
-# ----------------------------------
-
-QUAL_MAPPING = {
-    "Poor": 90,
-    "Fair": 60,
-    "Good": 30,
-    "Excellent": 10
-}
-
-BASELINES = {
-    "incident_score": (40, 10),
-    "unauthorized_access_score": (35, 10),
-    "response_time_score": (60, 15),
-    "cctv_uptime": (85, 5),
-    "guard_adequacy": (70, 10),
-    "after_hours_security": (65, 10)
-}
-
-def generate_baseline(feature_name, mean, std, n=30):
-    return np.random.normal(mean, std, n)
-
-def z_score_anomaly(current, baseline):
-    mean = baseline.mean()
-    std = baseline.std()
-    if std == 0:
-        return 0
-    return (current - mean) / std
-
-def run_anomaly_engine(data):
-    features = build_anomaly_features(data)
-    alerts = []
-
-    for feature, value in features.items():
-        mean, std = BASELINES[feature]
-        baseline = generate_baseline(feature, mean, std)
-        z = z_score_anomaly(value, baseline)
-
-        if abs(z) >= 2:
-            severity = "HIGH"
-        elif abs(z) >= 1.3:
-            severity = "MEDIUM"
-        else:
-            continue
-
-        alerts.append({
-            "feature": feature,
-            "severity": severity,
-            "z_score": round(z, 2),
-            "value": value,
-            "message": explain_anomaly(feature, value, z)
-        })
-
-    return alerts
-
-def explain_anomaly(feature, value, z):
-    explanations = {
-        "incident_score": f"Incident activity is significantly higher than normal.",
-        "unauthorized_access_score": "Unauthorized access attempts exceed historical patterns.",
-        "response_time_score": "Security response time deviates from expected standards.",
-        "cctv_uptime": "CCTV uptime has dropped below operational reliability levels.",
-        "guard_adequacy": "Guard coverage is insufficient compared to facility risk.",
-        "after_hours_security": "After-hours security posture is weaker than baseline."
-    }
-    return explanations.get(feature, "Unusual behavior detected.")
-
-def map_score(value):
-    if isinstance(value, str):
-        return QUAL_MAPPING[value]
-    return float(value)
-
-def compute_scores(data):
-    weights = {
-        "Physical Security": 0.25,
-        "Access Control": 0.30,
-        "Personnel": 0.15,
-        "Incident History": 0.20,
-        "Emergency Preparedness": 0.10
-    }
-
-    category_scores = {}
-    contributions = {}
-
-    for cat, items in data.items():
-        item_scores = [map_score(v) for v in items.values()]
-        avg_score = sum(item_scores) / len(item_scores)
-        category_scores[cat] = round(avg_score, 2)
-        contributions[cat] = round(avg_score * weights[cat], 2)
-
-    overall_score = round(sum(contributions.values()), 2)
-    return category_scores, contributions, overall_score
-
-def build_ml_features(data):
-    return pd.DataFrame([{
-        "size_employees": 580,
-        "daily_visitors": 60,
-        "facility_area_sqm": 22000,
-        "cctv_coverage_pct": map_score(data["Physical Security"]["CCTV Coverage %"]),
-        "cctv_functional_pct": map_score(data["Physical Security"]["CCTV Functionality %"]),
-        "perimeter_cond_num": map_score(data["Physical Security"]["Perimeter Condition"]),
-        "recording_sys_num": 30,
-        "exterior_light_num": map_score(data["Physical Security"]["Lighting Quality"]),
-        "interior_light_num": 70,
-        "parking_security": 1,
-        "total_guards": 12,
-        "guard_to_area_ratio_per_1000sqm": 12 / 22,
-        "training_frequency_years": 2,
-        "background_check_num": map_score(data["Personnel"]["Background Checks"]),
-        "turnover_rate_pct": 60,
-        "documentation_quality_num": map_score(data["Incident History"]["Documentation Quality"]),
-        "avg_response_time_min": 12,
-        "communication_score": map_score(data["Emergency Preparedness"]["Communication System"]),
-        "emergency_plan_flag": 0,
-        "drill_frequency_per_year": 0
-    }])
-
-def build_anomaly_features(data):
-    return {
-        "incident_score": data["Incident History"]["Incident Severity Score"],
-        "unauthorized_access_score": data["Incident History"]["Incident Types Score"],
-        "response_time_score": data["Incident History"]["Response Time Score"],
-        "cctv_uptime": data["Physical Security"]["CCTV Functionality %"],
-        "guard_adequacy": data["Personnel"]["Guard Count Ratio Score"],
-        "after_hours_security": map_score(data["Access Control"]["After-Hours Security"]),
-    }
-
-def generate_pdf(category_scores, contributions, overall, shap_img=None):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-
-    pdf.cell(200, 10, txt="Security Risk Assessment Report", ln=True, align='C')
-    pdf.ln(5)
-    pdf.cell(200, 10, txt=f"Overall Security Score: {overall}/100", ln=True)
-    pdf.ln(5)
-
-    pdf.set_font("Arial", "B", 11)
-    pdf.cell(200, 10, txt="Category Scores", ln=True)
-
-    pdf.set_font("Arial", size=10)
-    for k, v in category_scores.items():
-        pdf.cell(200, 7, txt=f"{k}: {v}", ln=True)
-
-    if shap_img:
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 11)
-        pdf.cell(200, 10, txt="AI Risk Explanation (SHAP)", ln=True)
-        pdf.image(shap_img, x=15, y=30, w=180)
-
-    file_path = "security_risk_report.pdf"
-    pdf.output(file_path)
-    return file_path
-
-def get_shap_values(explainer, X, target_index=0):
-    shap_vals = explainer.shap_values(X)
-    shap_target = shap_vals[target_index]
-    if isinstance(shap_target, list):
-        return shap_target[1][0]
-    return shap_target[0]
-
-def save_shap_plot(shap_values, feature_names):
-    import shap
-    fig, ax = plt.subplots(figsize=(6,4))
-    shap.bar_plot(shap_values, feature_names=feature_names, max_display=8, show=False)
-    plt.tight_layout()
-    img_path = "shap_explanation.png"
-    plt.savefig(img_path, dpi=150)
-    plt.close()
-    return img_path
-
-def risk_level(score):
-    if score <= 40:
-        return ("🟢 LOW RISK", "Low", "#28a745")
-    elif score <= 60:
-        return ("🟡 MODERATE RISK", "Moderate", "#ffc107")
-    elif score <= 80:
-        return ("🟠 HIGH RISK", "High", "#fd7e14")
-    else:
-        return ("🔴 CRITICAL RISK", "Critical", "#dc3545")
 
 # ----------------------------------
 # SESSION STATE INITIALIZATION
@@ -211,6 +31,13 @@ if "ml_preds" not in st.session_state:
     st.session_state.ml_preds = None
 if "analysis_complete" not in st.session_state:
     st.session_state.analysis_complete = False
+if "monitors" not in st.session_state:
+    st.session_state.monitors = {}
+if "camera_running" not in st.session_state:
+    st.session_state.camera_running = False
+if "health_history" not in st.session_state:
+    st.session_state.health_history = []
+
 
 # ----------------------------------
 # MAIN UI
@@ -220,7 +47,7 @@ st.title("Risk-Security Diagnostic")
 st.markdown("### Comprehensive facility security analysis and risk scoring")
 
 # Create tabs for better organization
-tab1, tab2, tab3, tab4 = st.tabs(["📝 Data Input", "📊 Risk Analysis", "🤖 AI Predictions", "🔍 Anomaly Detection"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Data Input", "📊 Risk Analysis", "🤖 AI Predictions", "🔍 Anomaly Detection", "Camera Health"])
 
 # ----------------------------------
 # TAB 1: DATA INPUT
@@ -346,7 +173,7 @@ with tab2:
             if st.button("📄 Download Report", use_container_width=True):
                 file_path = generate_pdf(category_scores, contributions, overall)
                 with open(file_path, "rb") as pdf:
-                    st.download_button("💾 Get PDF", pdf, file_name="security_report.pdf", use_container_width=True)
+                    st.download_button("Get PDF", pdf, file_name="security_report.pdf", use_container_width=True)
         
         st.markdown("---")
         
@@ -460,7 +287,7 @@ with tab3:
                     shap_img
                 )
                 with open(file_path, "rb") as f:
-                    st.download_button("💾 Get PDF Report", f, file_name="ai_security_report.pdf")
+                    st.download_button("Get PDF Report", f, file_name="ai_security_report.pdf")
             
             st.markdown("---")
             
@@ -517,6 +344,313 @@ with tab4:
                         st.warning(f"⚠️ **MEDIUM SEVERITY** - {a['message']} (Z-Score: {a['z_score']})")
     else:
         st.info("👈 Please complete the assessment in the 'Data Input' tab first.")
+
+#TAB 5 - CAMERA HEALTH FEATURE
+
+with tab5:
+    st.header("⚙️ Configuration")
+    
+    camera_source = st.selectbox(
+        "Camera Source",
+        ["Webcam (0)", "Webcam (1)", "RTSP Stream", "Video File", "Simulated Feed"]
+    )
+    
+    if camera_source == "RTSP Stream":
+        rtsp_url = st.text_input("RTSP URL", "rtsp://admin:password@192.168.1.64:554/stream1")
+        camera_id = st.text_input("Camera ID", "CAM-RTSP-001")
+    elif camera_source == "Video File":
+        video_file = st.text_input("Video File Path", "test_video.mp4")
+        camera_id = st.text_input("Camera ID", "CAM-FILE-001")
+    elif camera_source == "Simulated Feed":
+        camera_id = st.text_input("Camera ID", "CAM-SIM-001")
+    else:
+        webcam_index = 0 if "0" in camera_source else 1
+        camera_id = st.text_input("Camera ID", f"CAM-WEBCAM-{webcam_index}")
+    
+    st.markdown("---")
+    
+    st.subheader("🎯 Alert Thresholds")
+    
+    blur_threshold = st.slider("Blur Threshold", 50, 500, 100,
+                               help="Below this value = blurry")
+    brightness_min = st.slider("Min Brightness", 0, 100, 50)
+    brightness_max = st.slider("Max Brightness", 150, 255, 200)
+    fps_threshold = st.slider("Min FPS", 5, 30, 15)
+    
+    st.markdown("---")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        start_btn = st.button("▶️ Start", use_container_width=True, type="primary")
+    with col2:
+        stop_btn = st.button("⏹️ Stop", use_container_width=True)
+
+
+    # Main content area
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("📹 Live Feed")
+        video_placeholder = st.empty()
+        
+    with col2:
+        st.subheader("📊 Health Metrics")
+        health_score_placeholder = st.empty()
+        status_placeholder = st.empty()
+        metrics_placeholder = st.empty()
+    
+    # Issues and alerts section
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("⚠️ Current Issues")
+        issues_placeholder = st.empty()
+    
+    with col2:
+        st.subheader("🔔 Recent Alerts")
+        alerts_placeholder = st.empty()
+    
+    # Trends chart
+    st.markdown("---")
+    st.subheader("📈 Health Score Trend")
+    chart_placeholder = st.empty()
+
+
+# =============================================================================
+# CAMERA FEED FUNCTIONS
+# =============================================================================
+
+def get_camera_source(source_type):
+    """Get OpenCV VideoCapture object based on source type"""
+    if "Webcam" in source_type:
+        index = 0 if "(0)" in source_type else 1
+        return cv2.VideoCapture(index)
+    elif source_type == "RTSP Stream":
+        return cv2.VideoCapture(rtsp_url)
+    elif source_type == "Video File":
+        return cv2.VideoCapture(video_file)
+    elif source_type == "Simulated Feed":
+        return SimulatedCamera()
+    return None
+
+
+class SimulatedCamera:
+    """Simulate camera for testing without hardware"""
+    
+    def __init__(self, width=640, height=480):
+        self.width = width
+        self.height = height
+        self.frame_count = 0
+        self.is_opened = True
+    
+    def isOpened(self):
+        return self.is_opened
+    
+    def read(self):
+        """Generate synthetic frame"""
+        self.frame_count += 1
+        
+        # Create base frame
+        frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        
+        # Add some variation
+        t = self.frame_count / 30  # time factor
+        
+        # Simulate different conditions
+        if self.frame_count % 300 < 100:
+            # Good quality
+            brightness = 100 + 30 * np.sin(t)
+            frame[:] = (brightness, brightness, brightness)
+            
+            # Add some pattern
+            cv2.circle(frame, (320 + int(50*np.cos(t)), 240 + int(50*np.sin(t))), 
+                      50, (255, 100, 0), -1)
+            cv2.rectangle(frame, (100, 100), (540, 380), (0, 255, 255), 3)
+            
+        elif self.frame_count % 300 < 200:
+            # Too dark
+            frame[:] = (30, 30, 30)
+            cv2.putText(frame, "DARK SCENE", (180, 240),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 100, 100), 2)
+            
+        else:
+            # Blurry (add motion blur effect)
+            frame[:] = (120, 120, 120)
+            cv2.circle(frame, (320, 240), 80, (200, 200, 200), -1)
+            
+            # Apply blur
+            frame = cv2.GaussianBlur(frame, (31, 31), 10)
+            cv2.putText(frame, "BLURRY", (220, 240),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (150, 150, 150), 2)
+        
+        # Add timestamp
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        cv2.putText(frame, f"Frame: {self.frame_count} | {timestamp}", (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        return True, frame
+    
+    def release(self):
+        self.is_opened = False
+
+
+def process_camera_stream():
+    """Main processing loop"""
+    # Initialize monitor
+    monitor = CameraHealthMonitor(camera_id)
+    
+    # Update thresholds from sidebar
+    monitor.thresholds["blur_min"] = blur_threshold
+    monitor.thresholds["brightness_min"] = brightness_min
+    monitor.thresholds["brightness_max"] = brightness_max
+    monitor.thresholds["fps_min"] = fps_threshold
+    
+    # Get camera source
+    cap = get_camera_source(camera_source)
+    
+    if not cap or not cap.isOpened():
+        st.error("❌ Failed to open camera source")
+        return
+    
+    st.session_state.camera_running = True
+    frame_count = 0
+    
+    try:
+        while st.session_state.camera_running:
+            ret, frame = cap.read()
+            
+            if not ret:
+                st.warning("⚠️ Failed to read frame")
+                break
+            
+            frame_count += 1
+            
+            # Analyze frame
+            health_data = monitor.analyze_frame(frame)
+            
+            # Draw overlay
+            output_frame = monitor.draw_overlay(frame, health_data)
+            
+            # Convert BGR to RGB for Streamlit
+            output_frame = cv2.cvtColor(output_frame, cv2.COLOR_BGR2RGB)
+            
+            # Update display
+            video_placeholder.image(output_frame, channels="RGB", use_column_width=True)
+            
+            # Update health score with color
+            score = health_data["health_score"]
+            if score >= 80:
+                score_color = "green"
+            elif score >= 60:
+                score_color = "orange"
+            else:
+                score_color = "red"
+            
+            health_score_placeholder.markdown(
+                f"<h1 style='text-align: center; color: {score_color};'>{score:.0f}/100</h1>",
+                unsafe_allow_html=True
+            )
+            
+            # Update status
+            status = "🟢 ONLINE" if health_data["status"] == "online" else "🔴 OFFLINE"
+            status_placeholder.markdown(f"### {status}")
+            
+            # Update metrics
+            metrics = health_data["metrics"]
+            metrics_df = pd.DataFrame({
+                "Metric": ["Blur Score", "Brightness", "Contrast", "Noise", "FPS"],
+                "Value": [
+                    f"{metrics['blur_score']:.1f}",
+                    f"{metrics['brightness']:.1f}",
+                    f"{metrics['contrast']:.1f}",
+                    f"{metrics['noise_level']:.1f}",
+                    f"{metrics['fps']:.1f}"
+                ]
+            })
+            metrics_placeholder.dataframe(metrics_df, use_container_width=True, hide_index=True)
+            
+            # Update issues
+            issues = health_data.get("issues", [])
+            if issues:
+                issues_text = "\n".join([f"❌ **{issue.replace('_', ' ').title()}**" for issue in issues])
+                issues_placeholder.markdown(issues_text)
+            else:
+                issues_placeholder.success("✅ No issues detected")
+            
+            # Update alerts
+            alerts = health_data.get("alerts", [])
+            if alerts:
+                alerts_text = ""
+                for alert in alerts[-5:]:
+                    severity_emoji = {
+                        "critical": "🔴",
+                        "high": "🟠",
+                        "medium": "🟡",
+                        "low": "🟢"
+                    }
+                    emoji = severity_emoji.get(alert["severity"], "ℹ️")
+                    time_str = datetime.fromisoformat(alert["timestamp"]).strftime("%H:%M:%S")
+                    alerts_text += f"{emoji} **{time_str}** - {alert['message']}\n\n"
+                
+                alerts_placeholder.markdown(alerts_text)
+            else:
+                alerts_placeholder.info("No recent alerts")
+            
+            # Store history for chart
+            st.session_state.health_history.append({
+                "timestamp": datetime.now(),
+                "score": score
+            })
+            
+            # Keep only last 100 points
+            if len(st.session_state.health_history) > 100:
+                st.session_state.health_history = st.session_state.health_history[-100:]
+            
+            # Update chart
+            if len(st.session_state.health_history) > 1:
+                history_df = pd.DataFrame(st.session_state.health_history)
+                chart_placeholder.line_chart(
+                    history_df.set_index("timestamp")["score"],
+                    use_container_width=True
+                )
+            
+            # Small delay to prevent overwhelming the UI
+            time.sleep(0.033)  # ~30 FPS
+    
+    except Exception as e:
+        st.error(f"❌ Error: {str(e)}")
+    
+    finally:
+        cap.release()
+        st.session_state.camera_running = False
+
+
+# =============================================================================
+# BUTTON HANDLERS
+# =============================================================================
+
+    if start_btn:
+        if not st.session_state.camera_running:
+            with st.spinner("Starting camera..."):
+                process_camera_stream()
+    
+    if stop_btn:
+        st.session_state.camera_running = False
+        st.success("Camera stopped")
+    
+    # Auto-refresh message
+    if not st.session_state.camera_running:
+        st.info("👆 Click **Start** to begin monitoring")
+    else:
+        st.info("Camera is running. Click **Stop** to end monitoring.")
+    
+    
+    # Footer
+    st.markdown("---")
+    st.caption("Camera Health Monitoring System v1.0 | Phase 1 Implementation")
+    
 
 # ----------------------------------
 # SIDEBAR
