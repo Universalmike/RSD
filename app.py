@@ -3,8 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from fpdf import FPDF
 import numpy as np
-from risk_ass import *
-from camera import CameraHealthMonitor
+#from risk_ass import *
+#from camera import CameraHealthMonitor
 # ----------------------------------
 # PAGE CONFIG
 # ----------------------------------
@@ -31,12 +31,12 @@ if "ml_preds" not in st.session_state:
     st.session_state.ml_preds = None
 if "analysis_complete" not in st.session_state:
     st.session_state.analysis_complete = False
-if "monitors" not in st.session_state:
-    st.session_state.monitors = {}
-if "camera_running" not in st.session_state:
-    st.session_state.camera_running = False
-if "health_history" not in st.session_state:
-    st.session_state.health_history = []
+# if "monitors" not in st.session_state:
+#     st.session_state.monitors = {}
+# if "camera_running" not in st.session_state:
+#     st.session_state.camera_running = False
+# if "health_history" not in st.session_state:
+#     st.session_state.health_history = []
 
 
 # ----------------------------------
