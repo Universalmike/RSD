@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from fpdf import FPDF
 import numpy as np
-
+from functions.risk_ass import *
 # ----------------------------------
 # PAGE CONFIG
 # ----------------------------------
