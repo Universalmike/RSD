@@ -3,8 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from fpdf import FPDF
 import numpy as np
-from functions.risk_ass import *
-from functions.camera import CameraHealthMonitor
+from risk_ass import *
+from camera import CameraHealthMonitor
 # ----------------------------------
 # PAGE CONFIG
 # ----------------------------------
