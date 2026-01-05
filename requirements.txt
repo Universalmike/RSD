@@ -4,5 +4,5 @@ matplotlib
 fpdf
 joblib
 shap
-opencv
+opencv-python
 numpy
