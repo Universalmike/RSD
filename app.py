@@ -423,30 +423,31 @@ with tab5:
     uploaded_video = st.file_uploader("Choose a video file", type=["mp4", "avi", "mov", "mkv"])
     
    if uploaded_video is not None:
-    from video_upload_handler import process_uploaded_video
-    
-    # Settings
-    col1, col2 = st.columns(2)
-    with col1:
-        analyze_every_n = st.slider("Analyze every N frames", 1, 30, 10)
-    with col2:
-        max_frames = st.slider("Max frames", 10, 500, 100)
-    
-    if st.button("🔍 Analyze Video", type="primary"):
-        results = process_uploaded_video(
-            uploaded_video,
-            st.session_state.health_monitor,  # Your monitor instance
-            max_frames=max_frames,
-            analyze_every_n=analyze_every_n
-        )
+       
+        from video_upload_handler import process_uploaded_video
         
-        if results:
-            # Display results
-            import pandas as pd
-            df = pd.DataFrame(results)
+        # Settings
+        col1, col2 = st.columns(2)
+        with col1:
+            analyze_every_n = st.slider("Analyze every N frames", 1, 30, 10)
+        with col2:
+            max_frames = st.slider("Max frames", 10, 500, 100)
+        
+        if st.button("🔍 Analyze Video", type="primary"):
+            results = process_uploaded_video(
+                uploaded_video,
+                st.session_state.health_monitor,  # Your monitor instance
+                max_frames=max_frames,
+                analyze_every_n=analyze_every_n
+            )
             
-            st.success(f"✅ Analyzed {len(results)} frames")
-            st.line_chart(df.set_index("timestamp")["health_score"])
+            if results:
+                # Display results
+                import pandas as pd
+                df = pd.DataFrame(results)
+                
+                st.success(f"✅ Analyzed {len(results)} frames")
+                st.line_chart(df.set_index("timestamp")["health_score"])
 
 # =============================================================================
 # CAMERA FEED FUNCTIONS
