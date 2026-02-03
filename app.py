@@ -421,8 +421,7 @@ with tab5:
     st.info("💡 Upload a video file (.mp4, .avi, .mov) to analyze")
     
     uploaded_video = st.file_uploader("Choose a video file", type=["mp4", "avi", "mov", "mkv"])
-    
-   if uploaded_video is not None:
+    if uploaded_video is not None:
        
         from video_upload_handler import process_uploaded_video
         
