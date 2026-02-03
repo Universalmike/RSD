@@ -7,3 +7,5 @@ shap
 datetime
 numpy
 google-generativeai>=0.5.4
+opencv-python-headless
+PIL
