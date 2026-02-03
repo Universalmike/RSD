@@ -15,7 +15,7 @@ import io
 # Import your health monitor
 # Assuming you have camera_health_monitor.py in same folder
 try:
-    from camera_health_monitor import CameraHealthMonitor
+    from camera import CameraHealthMonitor
 except:
     st.error("⚠️ camera_health_monitor.py not found in the same folder")
     st.stop()
