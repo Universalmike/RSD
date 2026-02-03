@@ -37,7 +37,8 @@ if "camera_running" not in st.session_state:
     st.session_state.camera_running = False
 if "health_history" not in st.session_state:
     st.session_state.health_history = []
-
+if "health_monitor" not in st.session_state:
+    st.session_state.health_monitor = CameraHealthMonitor("CAM-001")
 
 # ----------------------------------
 # MAIN UI
