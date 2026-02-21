@@ -469,6 +469,7 @@ with tab5:
 
 # Update metrics in real-time
     if webrtc_ctx.state.playing:
+        
         status_placeholder.success("🟢 Camera is LIVE")
         
         # Update loop
@@ -480,10 +481,8 @@ with tab5:
         #         # Update health score
         #         score = health_data["health_score"]
         # Get latest data from queue
-       try:
-           
+        try:
             health_data = st.session_state.health_queue.get_nowait()
-            
             # Add to history
             st.session_state.health_history.append(health_data)
             
