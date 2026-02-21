@@ -6,3 +6,5 @@ joblib
 shap
 opencv-python-headless
 numpy
+streamlit-webrtc
+av
