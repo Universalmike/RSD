@@ -40,6 +40,74 @@ if "health_history" not in st.session_state:
 if "health_monitor" not in st.session_state:
     st.session_state.health_monitor = CameraHealthMonitor("CAM-001")
 
+#WebRTC Configuration for better connectivity
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
+
+# Global variables for thread-safe communication
+class VideoProcessor:
+    """
+    Process video frames in real-time
+    """
+    
+    def __init__(self):
+        self.monitor = CameraHealthMonitor("LIVE-CAM")
+        self.health_data_lock = threading.Lock()
+        self.latest_health_data = None
+        self.frame_count = 0
+        self.health_history = deque(maxlen=100)
+        
+    def recv(self, frame):
+        """
+        Receive and process each video frame
+        
+        Args:
+            frame: Video frame from WebRTC
+            
+        Returns:
+            Processed frame with overlays
+        """
+        # Convert from PyAV frame to numpy array
+        img = frame.to_ndarray(format="bgr24")
+        
+        # Analyze every 3rd frame (to reduce processing load)
+        if self.frame_count % 3 == 0:
+            health_data = self.monitor.analyze_frame(img)
+            
+            # Thread-safe update
+            with self.health_data_lock:
+                self.latest_health_data = health_data
+                self.health_history.append({
+                    "timestamp": datetime.now(),
+                    "score": health_data["health_score"],
+                    "blur": health_data["metrics"]["blur_score"],
+                    "brightness": health_data["metrics"]["brightness"]
+                })
+            
+            # Draw overlays on frame
+            img = self.monitor.draw_overlay(img, health_data)
+        
+        self.frame_count += 1
+        
+        # Convert back to PyAV frame
+        return av.VideoFrame.from_ndarray(img, format="bgr24")
+    
+    def get_latest_health_data(self):
+        """Get latest health analysis (thread-safe)"""
+        with self.health_data_lock:
+            return self.latest_health_data
+    
+    def get_health_history(self):
+        """Get health history (thread-safe)"""
+        with self.health_data_lock:
+            return list(self.health_history)
+
+
+# Initialize session state
+if "video_processor" not in st.session_state:
+    st.session_state.video_processor = VideoProcessor()
+
 # ----------------------------------
 # MAIN UI
 # ----------------------------------
@@ -349,74 +417,220 @@ with tab4:
 #TAB 5 - CAMERA HEALTH FEATURE
 
 with tab5:
-    st.header("⚙️ Configuration")
+    st.title("🎥 Live Camera Health Monitoring")
+    st.markdown("### Real-time video quality analysis")
+    st.subheader("📹 Live Video Feed")
     
-    camera_source = st.selectbox(
-        "Camera Source",
-        ["Webcam (0)", "Webcam (1)", "RTSP Stream", "Video File", "Simulated Feed"]
+    # WebRTC streamer
+    webrtc_ctx = webrtc_streamer(
+        key="camera-health",
+        mode=WebRtcMode.SENDRECV,
+        rtc_configuration=RTC_CONFIGURATION,
+        video_processor_factory=lambda: st.session_state.video_processor,
+        media_stream_constraints={
+            "video": {
+                "width": {"ideal": 1280},
+                "height": {"ideal": 720},
+            },
+            "audio": False
+        },
+        async_processing=True,
     )
-    
-    if camera_source == "RTSP Stream":
-        rtsp_url = st.text_input("RTSP URL", "rtsp://admin:password@192.168.1.64:554/stream1")
-        camera_id = st.text_input("Camera ID", "CAM-RTSP-001")
-    elif camera_source == "Video File":
-        video_file = st.text_input("Video File Path", "test_video.mp4")
-        camera_id = st.text_input("Camera ID", "CAM-FILE-001")
-    elif camera_source == "Simulated Feed":
-        camera_id = st.text_input("Camera ID", "CAM-SIM-001")
-    else:
-        webcam_index = 0 if "0" in camera_source else 1
-        camera_id = st.text_input("Camera ID", f"CAM-WEBCAM-{webcam_index}")
-    
-    st.markdown("---")
-    
-    st.subheader("🎯 Alert Thresholds")
-    
-    blur_threshold = st.slider("Blur Threshold", 50, 500, 100,
-                               help="Below this value = blurry")
-    brightness_min = st.slider("Min Brightness", 0, 100, 50)
-    brightness_max = st.slider("Max Brightness", 150, 255, 200)
-    fps_threshold = st.slider("Min FPS", 5, 30, 15)
-    
-    st.markdown("---")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        start_btn = st.button("▶️ Start", use_container_width=True, type="primary")
-    with col2:
-        stop_btn = st.button("⏹️ Stop", use_container_width=True)
 
+#with col2:
+    st.subheader("📊 Live Metrics")
+    
+    # Placeholders for live updates
+    health_score_placeholder = st.empty()
+    status_placeholder = st.empty()
+    metrics_table_placeholder = st.empty()
+    issues_placeholder = st.empty()
 
-    # Main content area
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.subheader("📹 Live Feed")
-        video_placeholder = st.empty()
-        
-    with col2:
-        st.subheader("📊 Health Metrics")
-        health_score_placeholder = st.empty()
-        status_placeholder = st.empty()
-        metrics_placeholder = st.empty()
-    
-    # Issues and alerts section
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("⚠️ Current Issues")
-        issues_placeholder = st.empty()
-    
-    with col2:
-        st.subheader("🔔 Recent Alerts")
-        alerts_placeholder = st.empty()
-    
-    # Trends chart
-    st.markdown("---")
+# Chart below
+    #st.markdown("---")
+    chart_col1, chart_col2 = st.columns(2)
+
+# with chart_col1:
     st.subheader("📈 Health Score Trend")
-    chart_placeholder = st.empty()
+    health_chart_placeholder = st.empty()
+
+#with chart_col2:
+    st.subheader("📊 Quality Metrics")
+    quality_chart_placeholder = st.empty()
+
+# Update metrics in real-time
+    if webrtc_ctx.state.playing:
+        status_placeholder.success("🟢 Camera is LIVE")
+        
+        # Update loop
+        while webrtc_ctx.state.playing:
+            # Get latest data
+            health_data = st.session_state.video_processor.get_latest_health_data()
+            
+            if health_data:
+                # Update health score
+                score = health_data["health_score"]
+                
+                if score >= 80:
+                    health_score_placeholder.success(f"# {score:.0f}/100")
+                elif score >= 60:
+                    health_score_placeholder.warning(f"# {score:.0f}/100")
+                else:
+                    health_score_placeholder.error(f"# {score:.0f}/100")
+                
+                # Metrics table
+                import pandas as pd
+                metrics_df = pd.DataFrame({
+                    "Metric": [
+                        "Blur Score",
+                        "Brightness",
+                        "Contrast",
+                        "Noise Level",
+                        "FPS"
+                    ],
+                    "Value": [
+                        f"{health_data['metrics']['blur_score']:.1f}",
+                        f"{health_data['metrics']['brightness']:.1f}",
+                        f"{health_data['metrics']['contrast']:.1f}",
+                        f"{health_data['metrics']['noise_level']:.1f}",
+                        f"{health_data['metrics']['fps']:.1f}"
+                    ],
+                    "Status": [
+                        "✅" if health_data['metrics']['blur_score'] >= 100 else "⚠️",
+                        "✅" if 50 <= health_data['metrics']['brightness'] <= 200 else "⚠️",
+                        "✅" if health_data['metrics']['contrast'] >= 30 else "⚠️",
+                        "✅" if health_data['metrics']['noise_level'] < 50 else "⚠️",
+                        "✅" if health_data['metrics']['fps'] >= 15 else "⚠️"
+                    ]
+                })
+                
+                metrics_table_placeholder.dataframe(
+                    metrics_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # Issues
+                if health_data.get("issues"):
+                    issues_text = "### ⚠️ Issues Detected:\n"
+                    for issue in health_data["issues"]:
+                        issues_text += f"- ❌ {issue.replace('_', ' ').title()}\n"
+                    issues_placeholder.error(issues_text)
+                else:
+                    issues_placeholder.success("### ✅ No Issues Detected")
+                
+                # Charts
+                history = st.session_state.video_processor.get_health_history()
+                
+                if len(history) > 1:
+                    import pandas as pd
+                    history_df = pd.DataFrame(history)
+                    
+                    # Health score chart
+                    health_chart_placeholder.line_chart(
+                        history_df.set_index("timestamp")["score"],
+                        use_container_width=True
+                    )
+                    
+                    # Quality metrics chart
+                    quality_df = history_df.set_index("timestamp")[["blur", "brightness"]]
+                    quality_chart_placeholder.line_chart(
+                        quality_df,
+                        use_container_width=True
+                    )
+            
+            # Small delay to prevent too frequent updates
+            import time
+            time.sleep(0.5)
+    
+    else:
+        status_placeholder.info("📹 Click START above to begin live monitoring")
+        health_score_placeholder.info("Waiting for camera...")
+        issues_placeholder.info("No data yet")
+    
+    # Sidebar info
+    #with st.sidebar:
+    st.header("ℹ️ Camera Information")
+    
+    if webrtc_ctx.state.playing:
+        st.success("🟢 Camera Active")
+        
+        processor = st.session_state.video_processor
+        st.metric("Frames Processed", processor.frame_count)
+        
+        if processor.latest_health_data:
+            st.metric("Current Health", 
+                     f"{processor.latest_health_data['health_score']:.0f}/100")
+    else:
+        st.info("🔴 Camera Inactive")
+    # st.header("⚙️ Configuration")
+    
+    # camera_source = st.selectbox(
+    #     "Camera Source",
+    #     ["Webcam (0)", "Webcam (1)", "RTSP Stream", "Video File", "Simulated Feed"]
+    # )
+    
+    # if camera_source == "RTSP Stream":
+    #     rtsp_url = st.text_input("RTSP URL", "rtsp://admin:password@192.168.1.64:554/stream1")
+    #     camera_id = st.text_input("Camera ID", "CAM-RTSP-001")
+    # elif camera_source == "Video File":
+    #     video_file = st.text_input("Video File Path", "test_video.mp4")
+    #     camera_id = st.text_input("Camera ID", "CAM-FILE-001")
+    # elif camera_source == "Simulated Feed":
+    #     camera_id = st.text_input("Camera ID", "CAM-SIM-001")
+    # else:
+    #     webcam_index = 0 if "0" in camera_source else 1
+    #     camera_id = st.text_input("Camera ID", f"CAM-WEBCAM-{webcam_index}")
+    
+    # st.markdown("---")
+    
+    # st.subheader("🎯 Alert Thresholds")
+    
+    # blur_threshold = st.slider("Blur Threshold", 50, 500, 100,
+    #                            help="Below this value = blurry")
+    # brightness_min = st.slider("Min Brightness", 0, 100, 50)
+    # brightness_max = st.slider("Max Brightness", 150, 255, 200)
+    # fps_threshold = st.slider("Min FPS", 5, 30, 15)
+    
+    # st.markdown("---")
+    
+    # col1, col2 = st.columns(2)
+    
+    # with col1:
+    #     start_btn = st.button("▶️ Start", use_container_width=True, type="primary")
+    # with col2:
+    #     stop_btn = st.button("⏹️ Stop", use_container_width=True)
+
+
+    # # Main content area
+    # col1, col2 = st.columns([2, 1])
+    
+    # with col1:
+    #     st.subheader("📹 Live Feed")
+    #     video_placeholder = st.empty()
+        
+    # with col2:
+    #     st.subheader("📊 Health Metrics")
+    #     health_score_placeholder = st.empty()
+    #     status_placeholder = st.empty()
+    #     metrics_placeholder = st.empty()
+    
+    # # Issues and alerts section
+    # st.markdown("---")
+    # col1, col2 = st.columns(2)
+    
+    # with col1:
+    #     st.subheader("⚠️ Current Issues")
+    #     issues_placeholder = st.empty()
+    
+    # with col2:
+    #     st.subheader("🔔 Recent Alerts")
+    #     alerts_placeholder = st.empty()
+    
+    # # Trends chart
+    # st.markdown("---")
+    # st.subheader("📈 Health Score Trend")
+    # chart_placeholder = st.empty()
 
     st.header("📁 Upload Video File")
     st.info("💡 Upload a video file (.mp4, .avi, .mov) to analyze")
