@@ -44,6 +44,10 @@ if "health_history" not in st.session_state:
     st.session_state.health_history = []
 if "health_monitor" not in st.session_state:
     st.session_state.health_monitor = CameraHealthMonitor("CAM-001")
+if "health_queue" not in st.session_state:
+    st.session_state.health_queue = queue.Queue(maxsize=1)
+if "health_history" not in st.session_state:
+    st.session_state.health_history = deque(maxlen=100)
 
 #WebRTC Configuration for better connectivity
 RTC_CONFIGURATION = RTCConfiguration(
@@ -431,7 +435,7 @@ with tab5:
         key="camera-health",
         mode=WebRtcMode.SENDRECV,
         rtc_configuration=RTC_CONFIGURATION,
-        video_processor_factory=lambda: st.session_state.video_processor,
+        video_processor_factory=VideoProcessor,
         media_stream_constraints={
             "video": {
                 "width": {"ideal": 1280},
@@ -468,85 +472,94 @@ with tab5:
         status_placeholder.success("🟢 Camera is LIVE")
         
         # Update loop
-        while webrtc_ctx.state.playing:
-            # Get latest data
-            health_data = st.session_state.video_processor.get_latest_health_data()
+        # while webrtc_ctx.state.playing:
+        #     # Get latest data
+        #     health_data = st.session_state.video_processor.get_latest_health_data()
             
-            if health_data:
-                # Update health score
-                score = health_data["health_score"]
+        #     if health_data:
+        #         # Update health score
+        #         score = health_data["health_score"]
+        # Get latest data from queue
+        try:
+            health_data = st.session_state.health_queue.get_nowait()
+            
+            # Add to history
+            st.session_state.health_history.append(health_data)
+            
+            # Update health score
+            score = health_data["score"]
                 
-                if score >= 80:
-                    health_score_placeholder.success(f"# {score:.0f}/100")
-                elif score >= 60:
-                    health_score_placeholder.warning(f"# {score:.0f}/100")
-                else:
-                    health_score_placeholder.error(f"# {score:.0f}/100")
-                
-                # Metrics table
+            if score >= 80:
+                health_score_placeholder.success(f"# {score:.0f}/100")
+            elif score >= 60:
+                health_score_placeholder.warning(f"# {score:.0f}/100")
+            else:
+                health_score_placeholder.error(f"# {score:.0f}/100")
+            
+            # Metrics table
+            import pandas as pd
+            metrics_df = pd.DataFrame({
+                "Metric": [
+                    "Blur Score",
+                    "Brightness",
+                    "Contrast",
+                    "Noise Level",
+                    "FPS"
+                ],
+                "Value": [
+                    f"{health_data['metrics']['blur_score']:.1f}",
+                    f"{health_data['metrics']['brightness']:.1f}",
+                    f"{health_data['metrics']['contrast']:.1f}",
+                    f"{health_data['metrics']['noise_level']:.1f}",
+                    f"{health_data['metrics']['fps']:.1f}"
+                ],
+                "Status": [
+                    "✅" if health_data['metrics']['blur_score'] >= 100 else "⚠️",
+                    "✅" if 50 <= health_data['metrics']['brightness'] <= 200 else "⚠️",
+                    "✅" if health_data['metrics']['contrast'] >= 30 else "⚠️",
+                    "✅" if health_data['metrics']['noise_level'] < 50 else "⚠️",
+                    "✅" if health_data['metrics']['fps'] >= 15 else "⚠️"
+                ]
+            })
+            
+            metrics_table_placeholder.dataframe(
+                metrics_df,
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # Issues
+            if health_data.get("issues"):
+                issues_text = "### ⚠️ Issues Detected:\n"
+                for issue in health_data["issues"]:
+                    issues_text += f"- ❌ {issue.replace('_', ' ').title()}\n"
+                issues_placeholder.error(issues_text)
+            else:
+                issues_placeholder.success("### ✅ No Issues Detected")
+            
+            # Charts
+            history = st.session_state.video_processor.get_health_history()
+            
+            if len(history) > 1:
                 import pandas as pd
-                metrics_df = pd.DataFrame({
-                    "Metric": [
-                        "Blur Score",
-                        "Brightness",
-                        "Contrast",
-                        "Noise Level",
-                        "FPS"
-                    ],
-                    "Value": [
-                        f"{health_data['metrics']['blur_score']:.1f}",
-                        f"{health_data['metrics']['brightness']:.1f}",
-                        f"{health_data['metrics']['contrast']:.1f}",
-                        f"{health_data['metrics']['noise_level']:.1f}",
-                        f"{health_data['metrics']['fps']:.1f}"
-                    ],
-                    "Status": [
-                        "✅" if health_data['metrics']['blur_score'] >= 100 else "⚠️",
-                        "✅" if 50 <= health_data['metrics']['brightness'] <= 200 else "⚠️",
-                        "✅" if health_data['metrics']['contrast'] >= 30 else "⚠️",
-                        "✅" if health_data['metrics']['noise_level'] < 50 else "⚠️",
-                        "✅" if health_data['metrics']['fps'] >= 15 else "⚠️"
-                    ]
-                })
+                history_df = pd.DataFrame(history)
                 
-                metrics_table_placeholder.dataframe(
-                    metrics_df,
-                    use_container_width=True,
-                    hide_index=True
+                # Health score chart
+                health_chart_placeholder.line_chart(
+                    history_df.set_index("timestamp")["score"],
+                    use_container_width=True
                 )
                 
-                # Issues
-                if health_data.get("issues"):
-                    issues_text = "### ⚠️ Issues Detected:\n"
-                    for issue in health_data["issues"]:
-                        issues_text += f"- ❌ {issue.replace('_', ' ').title()}\n"
-                    issues_placeholder.error(issues_text)
-                else:
-                    issues_placeholder.success("### ✅ No Issues Detected")
-                
-                # Charts
-                history = st.session_state.video_processor.get_health_history()
-                
-                if len(history) > 1:
-                    import pandas as pd
-                    history_df = pd.DataFrame(history)
-                    
-                    # Health score chart
-                    health_chart_placeholder.line_chart(
-                        history_df.set_index("timestamp")["score"],
-                        use_container_width=True
-                    )
-                    
-                    # Quality metrics chart
-                    quality_df = history_df.set_index("timestamp")[["blur", "brightness"]]
-                    quality_chart_placeholder.line_chart(
-                        quality_df,
-                        use_container_width=True
-                    )
-            
-            # Small delay to prevent too frequent updates
-            import time
-            time.sleep(0.5)
+                # Quality metrics chart
+                quality_df = history_df.set_index("timestamp")[["blur", "brightness"]]
+                quality_chart_placeholder.line_chart(
+                    quality_df,
+                    use_container_width=True
+                )
+        
+        # Small delay to prevent too frequent updates
+        import time
+        time.sleep(0.5)
     
     else:
         status_placeholder.info("📹 Click START above to begin live monitoring")
