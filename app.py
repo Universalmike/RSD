@@ -541,28 +541,28 @@ with tab5:
             # No new data yet
             pass
         
-    # Update charts if we have history
-    if len(st.session_state.health_history) > 1:
-        import pandas as pd
-        history_df = pd.DataFrame(list(st.session_state.health_history))
-        
-        # Health score chart
-        health_chart_placeholder.line_chart(
-            history_df.set_index("timestamp")["score"],
-            use_container_width=True
-        )
-        
-        # Quality metrics chart
-        quality_df = history_df.set_index("timestamp")[["blur", "brightness"]]
-        quality_chart_placeholder.line_chart(
-            quality_df,
-            use_container_width=True
-        )
+        # Update charts if we have history
+        if len(st.session_state.health_history) > 1:
+            import pandas as pd
+            history_df = pd.DataFrame(list(st.session_state.health_history))
+            
+            # Health score chart
+            health_chart_placeholder.line_chart(
+                history_df.set_index("timestamp")["score"],
+                use_container_width=True
+            )
+            
+            # Quality metrics chart
+            quality_df = history_df.set_index("timestamp")[["blur", "brightness"]]
+            quality_chart_placeholder.line_chart(
+                quality_df,
+                use_container_width=True
+            )
 
-else:
-    status_placeholder.info("📹 Click START above to begin live monitoring")
-    health_score_placeholder.info("### Waiting for camera...")
-    issues_placeholder.info("Camera not active yet")
+    else:
+        status_placeholder.info("📹 Click START above to begin live monitoring")
+        health_score_placeholder.info("### Waiting for camera...")
+        issues_placeholder.info("Camera not active yet")
     # st.header("⚙️ Configuration")
     
     # camera_source = st.selectbox(
