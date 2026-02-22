@@ -51,9 +51,13 @@ if "health_history" not in st.session_state:
     st.session_state.health_history = deque(maxlen=100)
 
 #WebRTC Configuration for better connectivity
-RTC_CONFIGURATION = RTCConfiguration(
-    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-)
+RTC_CONFIGURATION = RTCConfiguration({
+    "iceServers": [
+        {"urls": ["stun:stun.l.google.com:19302"]},
+        {"urls": ["stun:stun1.l.google.com:19302"]},
+        {"urls": ["stun:stun2.l.google.com:19302"]},
+    ]
+})
 
 # Global variables for thread-safe communication
 class VideoProcessor:
